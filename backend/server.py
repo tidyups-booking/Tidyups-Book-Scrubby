@@ -916,9 +916,10 @@ async def update_assignment_status(assignment_id: str, payload: AssignmentStatus
 @api_router.post("/assignments/{assignment_id}/done")
 async def complete_assignment(assignment_id: str, payload: AssignmentDone):
     _check_pin(payload.pin, await _get_cleaner_pin())
+    now = datetime.now(timezone.utc).isoformat()
     res = await db.assignments.update_one(
         {"id": assignment_id, "cleaner_id": payload.cleaner_id},
-        {"$set": {"status": "done", "completed_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {"status": "done", "completed_at": now, "status_updated_at": now}},
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Assignment not found")
