@@ -203,7 +203,10 @@ export default function AdminHistory({ password }) {
   }, [password]);
 
   useEffect(() => {
-    load(selectedCleaner);
+    const timer = setTimeout(() => {
+      load(selectedCleaner);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [load, selectedCleaner]);
 
   const onSendReview = async (assignment) => {

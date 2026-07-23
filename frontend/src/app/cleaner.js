@@ -42,9 +42,14 @@ export default function CleanerScreen() {
 
   useEffect(() => {
     if (!profile) return;
-    loadJobs(profile);
+    const initialTimer = setTimeout(() => {
+      loadJobs(profile);
+    }, 0);
     const timer = setInterval(() => loadJobs(profile), 60000);
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(timer);
+    };
   }, [profile, loadJobs]);
 
   useEffect(() => {

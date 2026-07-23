@@ -35,7 +35,10 @@ export function BusinessProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    refresh();
+    const timer = setTimeout(() => {
+      refresh();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [refresh]);
 
   return <BusinessContext.Provider value={{ business, logoUrl, refresh }}>{children}</BusinessContext.Provider>;

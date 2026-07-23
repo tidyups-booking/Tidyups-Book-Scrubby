@@ -53,7 +53,7 @@ export default function HomeScreen() {
             <Text style={{ color: COLORS.pink }}>zero hassle.</Text>
           </Text>
           <Text style={styles.heroSub}>
-            Leave The Mess To Us! Edmonton's trusted residential & commercial cleaning crew — insured, eco-friendly and 5-star rated.
+            {"Leave The Mess To Us! Edmonton's trusted residential & commercial cleaning crew — insured, eco-friendly and 5-star rated."}
           </Text>
           <GradientButton
             title="Get Free Quote"
@@ -164,7 +164,7 @@ export default function HomeScreen() {
                   <Ionicons key={i} name="star" size={14} color={COLORS.gold} />
                 ))}
               </View>
-              <Text style={styles.reviewText}>"{t.text}"</Text>
+              <Text style={styles.reviewText}>{`"${t.text}"`}</Text>
               <Text style={styles.reviewName}>
                 {t.name} <Text style={{ color: COLORS.textMuted, fontFamily: FONTS.body }}>· {t.area}</Text>
               </Text>

@@ -31,7 +31,7 @@ export default function ContactScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <SectionHeader kicker="Get in touch" title="Contact Us" style={{ marginTop: 14 }} />
-        <Text style={styles.intro}>Questions, bookings or quotes — we're one tap away.</Text>
+        <Text style={styles.intro}>{"Questions, bookings or quotes — we're one tap away."}</Text>
 
         <View style={{ gap: 12 }}>
           <ContactRow

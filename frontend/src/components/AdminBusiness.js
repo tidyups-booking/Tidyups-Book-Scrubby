@@ -207,8 +207,8 @@ export default function AdminBusiness({ password, onPasswordChanged }) {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Review Requests</Text>
         <Text style={styles.reviewHint}>
-          When a cleaner marks a job as done, we'll text this link to the customer so they can leave a Google review. Grab
-          your business's Google review URL from your Business Profile.
+          {"When a cleaner marks a job as done, we'll text this link to the customer so they can leave a Google review. Grab"}
+          {" your business's Google review URL from your Business Profile."}
         </Text>
         <Field
           label="Google review link"

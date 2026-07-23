@@ -95,7 +95,7 @@ export default function LeadCard({ item, assignment, onAssign, onUnassign }) {
         </View>
       ) : null}
 
-      {displayMessage ? <Text style={styles.leadMessage}>"{displayMessage}"</Text> : null}
+      {displayMessage ? <Text style={styles.leadMessage}>{`"${displayMessage}"`}</Text> : null}
 
       {assignment ? (
         <View style={styles.assignedRow} testID="lead-assigned-row">

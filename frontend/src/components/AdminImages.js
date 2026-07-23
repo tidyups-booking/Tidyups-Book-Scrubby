@@ -52,7 +52,10 @@ export default function AdminImages({ password }) {
   }, []);
 
   useEffect(() => {
-    load();
+    const timer = setTimeout(() => {
+      load();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [load]);
 
   const pickAndUpload = async () => {
@@ -162,8 +165,7 @@ export default function AdminImages({ password }) {
             </Text>
           ) : null}
           <Text style={styles.hint}>
-            Images appear in the Home carousel and the Gallery tab instantly. Use the fit toggle on each image: "Fill
-            frame" crops to fill, "Show full" displays the whole graphic.
+            {'Images appear in the Home carousel and the Gallery tab instantly. Use the fit toggle on each image: "Fill frame" crops to fill, "Show full" displays the whole graphic.'}
           </Text>
         </View>
       }

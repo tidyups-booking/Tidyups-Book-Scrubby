@@ -148,7 +148,7 @@ export default function CleanerJobs({ jobs, onStatus, cleaner, onJobChange, setE
                 <Text style={styles.jobRowText}>Preferred: {job.preferred_date}</Text>
               </View>
             ) : null}
-            {job.message ? <Text style={styles.jobMessage}>"{job.message}"</Text> : null}
+            {job.message ? <Text style={styles.jobMessage}>{`"${job.message}"`}</Text> : null}
             {cleaner ? (
               <>
                 <PhotoRow job={job} kind="before" cleaner={cleaner} onJobChange={onJobChange} setError={setError} />

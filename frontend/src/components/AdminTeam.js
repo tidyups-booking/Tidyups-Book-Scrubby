@@ -66,12 +66,17 @@ export default function AdminTeam({ password }) {
   }, [password]);
 
   useEffect(() => {
-    load();
+    const initialTimer = setTimeout(() => {
+      load();
+    }, 0);
     fetchStaffPin(password)
       .then((d) => setPin(d.pin || ''))
       .catch(() => {});
-    const timer = setInterval(load, 30000);
-    return () => clearInterval(timer);
+    const pollTimer = setInterval(load, 30000);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(pollTimer);
+    };
   }, [load, password]);
 
   const onSavePin = async () => {
@@ -159,8 +164,7 @@ export default function AdminTeam({ password }) {
           <View style={styles.pinCard}>
           <Text style={styles.pinTitle}>Cleaner PIN</Text>
           <Text style={styles.pinHint}>
-            Cleaners check in from the Contact tab → "Cleaner Check-In" with this PIN, then share live location while
-            driving to a job.
+            {'Cleaners check in from the Contact tab → "Cleaner Check-In" with this PIN, then share live location while driving to a job.'}
           </Text>
           <View style={styles.pinRow}>
             <TextInput

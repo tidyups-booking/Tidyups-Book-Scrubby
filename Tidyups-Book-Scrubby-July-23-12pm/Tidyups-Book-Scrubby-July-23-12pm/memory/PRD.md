@@ -1,0 +1,177 @@
+# Tidyups Cleaning — MOBILE APP (Expo) — PRD
+
+## What this task is
+This fork was converted from the Tidyups website codebase into the **Tidyups mobile app** (Expo SDK 57 + expo-router,
+React Native). The user deploys THIS task to a **separate domain** (the website lives in the original task at
+https://bookmycleaning.xyz / tidyups.xyz and must NOT be touched from here).
+Original build spec: /app/MOBILE_APP_SPEC.md.
+
+## Architecture (IMPORTANT — two backends)
+- **Quotes + admin login** → PRODUCTION website backend `https://bookmycleaning.xyz/api` (shared leads DB + Twilio SMS).
+  Env: `EXPO_PUBLIC_BACKEND_URL` in frontend/.env. CORS on production is wide open (verified).
+- **App images (dynamic, admin-managed)** → THIS task's own FastAPI backend (`/app/backend`, port 8001) + its own Mongo
+  (`app_images` collection) + Emergent Object Storage. On web the app calls it same-origin (window.location.origin);
+  on native it uses `EXPO_PUBLIC_IMAGES_URL` (frontend/.env).
+- Frontend runs via supervisor `yarn start` = `expo start --web --port 3000`. Deployment build: `yarn build` =
+  `expo export -p web --output-dir build`.
+- Old website frontend preserved at /app/frontend_web_backup (do not delete; git history also has it).
+
+## App structure (frontend/src)
+- Tabs: Home (hero, CTAs, stats, badges, Promotions carousel, why-us, reviews), Services (9 services → Quote with
+  preselect), Quote (form → POST production /api/quotes), Gallery (dynamic images + fullscreen viewer),
+  Contact (tel links, hours, hidden Staff Login).
+- /admin (modal stack route): password login (production /api/admin/login, stored in AsyncStorage) → segmented tabs:
+  **Leads** (production GET /api/quotes, pull-to-refresh, tap-to-call) | **Images** (upload via expo-image-picker,
+  label, up/down reorder, delete, per-image fit toggle "Fill frame"/"Show full" — against LOCAL backend /api/app-images*) |
+  **Business** (AdminBusiness.js: logo upload/reset, phone, toll-free, address, website, editable hours rows → LOCAL /api/app-settings).
+- Business details are served app-wide via `src/lib/business.js` (BusinessProvider context wrapped in root _layout;
+  `useBusiness()` gives `business` in CONTACT shape + `logoUrl` + `refresh()`). Home call button/logo and the whole
+  Contact tab read from it; static CONTACT in constants/data.js is only the fallback default.
+- PWA: `src/app/+html.js` (manifest link, theme-color, apple meta, SW registration) + `public/manifest.json`,
+  `public/sw.js` (network-first navigation, cache-first assets, skips /api), `public/icons/*` (192/512/maskable/apple).
+- Theme: dark #0A0611 / panels #150B22, gradient #FF8A3D→#E0218A→#8B2FC9, fonts Sora (display) + Outfit (body).
+- Brand assets in frontend/assets/images (logo.png, banner.jpg, generated icon.png/splash-icon.png/favicon.png).
+
+## Backend additions (this fork only)
+- `/api/app-images` GET (public list, now includes `fit`), `/api/app-images/upload` POST (multipart file+label, X-Admin-Password),
+  `/api/app-images/{id}` DELETE (soft), `/api/app-images/{id}` PATCH (`{"fit":"cover"|"contain"}`), `/api/app-images/reorder` POST,
+  `/api/app-images/file/{path}` GET (serves from Emergent Object Storage).
+- `/api/app-settings` GET (public business details + computed phone_tel/tollfree_tel/maps_url/website_url),
+  PUT (admin, partial update of phone/tollfree/address/city_line/website/hours), `/api/app-settings/logo` POST (multipart upload,
+  sets logo_url) / DELETE (reset to default logo). Stored in `app_settings` collection (single doc key="business").
+- Cleaner tracking: `/api/staff/pin` GET/PUT (admin, 4-8 digit PIN, stored app_settings key="staff", default 1234),
+  `/api/cleaners/checkin` POST {name,pin} (dedupe by lowercased name, name max 80), `/api/cleaners/location` POST
+  {cleaner_id,pin,lat,lng} (bounds-validated, keeps last 20 history points, sets sharing=true+last_seen),
+  `/api/cleaners/stop` POST, `/api/cleaners` GET (admin), `/api/cleaners/{id}` DELETE (admin). Collection: `cleaners`.
+- Seeds 5 images on startup if `app_images` empty (2 cropped flyers stored in object storage + 3 customer-asset URLs).
+- `seed_site_images` self-heals BOTH `hero` and `why` slots on startup if soft-deleted.
+- backend/.env: MONGO_URL, DB_NAME=tidyups_database, ADMIN_PASSWORD=tidyups2026, EMERGENT_LLM_KEY (storage), CORS *.
+- backend/tests/conftest.py loads backend/.env so pytest never falls back to wrong DB.
+- NOTE: backend/tests/test_cleaner_tracking.py must run sequentially (`-n 0`) — PIN-mutation test races under xdist.
+
+## Critical notes
+- DO NOT modify the production website/backend — it belongs to the original task.
+- Quote POST to production sends a REAL SMS to the owner — ask user before submitting test quotes to production.
+- Admin password must stay in sync between production ADMIN_PASSWORD and this backend's .env.
+- Never `pip freeze > requirements.txt`; add packages manually. Do not add .env to .gitignore.
+- yarn needs `--ignore-engines` (node 20 vs some deps wanting 22) — handled via frontend/.yarnrc.
+- THIS POD: kernel inotify max_user_watches=12288 (cannot raise) → Metro's file watcher crashes with ENOSPC.
+  Fix in place: package.json start script is `CI=1 expo start --web --port 3000` (watching disabled).
+  **NO HOT RELOAD on frontend** — after any frontend code change run `sudo supervisorctl restart frontend` and wait ~25s.
+
+## Done (Feb 23, 2026 session — Job History + Photo Proof + Review Requests, iteration 12: 103/103 backend + frontend 100%)
+- **Job History (admin)** — new "History" tab (5th admin segment): browsable list of DONE assignments,
+  filterable by cleaner (chip row). Each card shows customer, service, address, phone, completed timestamp,
+  photo counts (before/after), and a "Send Google review link" CTA. Long tap thumbnails opens a fullscreen
+  photo viewer modal. Backend: `GET /api/assignments/history?cleaner_id=<opt>&limit=100` (admin), returns
+  status=done sorted by completed_at desc.
+- **Photo Proof (cleaner)** — Before/After PhotoRow blocks on every active job card. On mobile uses camera
+  (`launchCameraAsync`); on web falls back to file picker (`launchImageLibraryAsync`). Long-press or tap the
+  X on a thumbnail to remove. Photos live inside the assignment doc as
+  `photos:[{id,kind:'before'|'after',url,storage_path,uploaded_at}]`. Backend endpoints:
+  `POST /api/assignments/{id}/photos` (multipart: file+kind+cleaner_id+pin) and
+  `DELETE /api/assignments/{id}/photos/{photo_id}?cleaner_id=&pin=` (both PIN-gated).
+- **Review Requests** — new Business tab card "Review Requests" with `admin-biz-review-url` field for the
+  Google review link. Backend: `review_url` added to DEFAULT_BUSINESS + BusinessSettingsUpdate; when a
+  cleaner marks a job done via `/status`, `_auto_send_review` fires (Twilio SMS via existing config +
+  customer phone + business review_url). Manual re-send: `POST /api/assignments/{id}/send-review` (admin)
+  returns `{sent_via_sms, review_sent_at, review_url}`. In preview Twilio isn't configured →
+  `sent_via_sms:false` is expected; the admin can still copy the link.
+- New tests: `test_history_photos_reviews.py` (10 tests: review_url set/get, history done-only + filter +
+  401, photo upload rejects wrong pin/invalid kind + accepts before/after, photo delete, send-review admin
+  auth + 400 without url + 200 marks review_sent_at).
+- Iteration 12 result: 103/103 backend pytest, frontend 100% (Playwright verified admin 5-tab layout
+  at 420px width, History tab + filter + review send flow, Business review_url save+persist, cleaner
+  check-in + Before/After Upload buttons all working). Zero regressions on 93 existing tests.
+- **Advisory (non-blocking, not fixed to keep changes minimal)**: send-review sets `review_sent_at` even
+  when Twilio isn't configured (returns `sent_via_sms:false`). Admin sees "Review sent Nm ago" pill
+  regardless of whether SMS actually went out; the response payload includes the truth.
+
+## Done (June 24, 2026 session — code review + fixes, iteration 11: 93/93 backend, frontend 100%)
+- Ran code_review_agent on deployed codebase → verdict READY WITH FIXES (1 MEDIUM, 4 LOW). All fixed + tested:
+  - **MEDIUM — completed jobs vanished from dispatch board**: STATUS_META now includes done:'Completed' (green);
+    LeadCard shows Completed pill + check-circle, hides unassign X, shows "Assign again" button (repeat icon).
+    admin.js loadAssignments maps ALL assignments (active preferred over done per quote_id). Backend
+    create_assignment now delete_many({quote_id, status:{$ne:'done'}}) → done history preserved on re-assign,
+    "Done Today" counter no longer drops. New pytest: test_re_assign_after_done_preserves_history.
+  - LOW fixes: removed dead completeAssignment from api.js (legacy /done endpoint kept on backend — tests use it);
+    leadAlerts poll now clears stored admin pw on 401; unused catch bindings removed (AdminImages, cleaner.js,
+    api.js formatDate). oxlint: 0 warnings 0 errors.
+- Iteration 11 also retro-verified the previously-UNTESTED session-13 refactor (AdminLogin.js / LeadCard.js /
+  CleanerJobs.js extractions) — no regressions, all admin tabs + cleaner flow work end-to-end.
+- **PRODUCTION NOTE**: user redeployed (bookscrubby.com) BEFORE these fixes landed — production still has the
+  pre-fix code. Another redeploy is needed to ship the completed-jobs fix.
+- Known advisory notes from iter 11 (not bugs): done records grow unbounded per quote (consider archival later);
+  re-assign while a cleaner is mid-'cleaning' silently replaces their job; 30s poll refreshes assignments only.
+
+## Backlog
+- P1: Native builds via EAS — CONFIG READY (eas.json, plugins, guide at /app/STORE_SUBMISSION_GUIDE.md). User has
+  both Apple + Google dev accounts; they run `eas build`/`eas submit` from their machine (needs their Expo login).
+- P1 (unlocks review SMS in production): set TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER in
+  the LOCAL backend `.env` (production deploy). Once set, marking a job done or tapping "Send Google review
+  link" texts the customer their Google review URL automatically.
+- P2: True push notifications + background location for cleaners — bundle with native builds (foreground
+  polling/sharing already works everywhere).
+- P3 (code health, from testing agent review): split server.py (~1050 lines) into modules; wrap put_object/get_object
+  in run_in_threadpool (partially done for photo upload); hard-delete orphaned storage blobs on assignment/photo
+  delete; themed confirm dialogs instead of window.confirm; stale-ping warning on cleaner screen; pause
+  AdminTeam polling when tab hidden; assignment upsert w/ unique quote_id index; Field(max_length) on
+  AssignmentCreate; dynamic import() for leaflet; skip fitBounds when cleaner set unchanged;
+  AdminHistory catch on cleaners fetch is silent — surface a subtle hint.
+
+## Done (June 21, 2026 session)
+- Admin "Business" tab: editable logo (upload/reset), phone, toll-free, address, website, hours — live app-wide.
+- Per-image fit toggle (Fill frame / Show full) in admin Images; respected by Home promos + Gallery.
+- PWA: manifest, service worker, icons, meta tags (installable web app).
+- Fixes: hero slot self-heal on startup; tests conftest.py env loading; CI=1 Metro workaround for low inotify limit.
+- **Book Again**: last quote saved to AsyncStorage ('tidyups_last_quote', src/lib/lastQuote.js). Home shows
+  "Welcome back" card → /quote?bookAgain=<ts> prefills form (banner shown, stale date cleared). On submit of a
+  book-again form, message gets '[Book Again]' tag → admin LeadCard shows gold "Returning customer" chip and
+  strips the tag from the displayed message (production backend untouched — tag rides in the message field).
+- **Cleaner tracking**: /cleaner modal (Contact tab → "Cleaner Check-In"): name+PIN check-in (profile stored in
+  AsyncStorage 'tidyups_cleaner'), Start/Stop sharing via expo-location watchPositionAsync (20s/40m), pings LOCAL
+  backend. Admin → 4th "Team" segment (AdminTeam.js): PIN editor, live cleaner list (green dot if sharing &
+  last_seen<3min, 30s auto-poll), open-in-Google-Maps track button, delete.
+- **Lead alerts**: useLeadAlerts hook (src/lib/leadAlerts.js) in root layout — polls production GET /api/quotes
+  every 60s when tidyups_admin_pw stored, compares created_at vs 'tidyups_last_lead_seen', fires web Notification
+  (web) / expo-notifications local notification (native). Permission requested on admin login.
+- **Store prep**: eas.json (build profiles), app.json plugins (expo-location perm string, expo-notifications),
+  /app/STORE_SUBMISSION_GUIDE.md (user has both Apple + Google accounts; builds must run from user's machine
+  with their Expo login), /app/PRIVACY_POLICY.md (host at tidyupscleaning.com/privacy for store listings).
+- All tested: iteration_6.json (19/19 + 100%), iteration_7.json (20/20 + 100%), Book Again self-tested via
+  Playwright with network interception (no production quote ever submitted).
+- **Code-quality pass (iteration 8, all verified — 68/68 backend, 0 console errors)**: removed both
+  dangerouslySetInnerHTML in +html.js (style → string child; SW registration → public/register-sw.js);
+  test files read ADMIN_PASSWORD from env via conftest (no hardcoded creds); serve_site_image/serve_app_image
+  return moved inside try; `is True/False` assertions → truthiness; contact.js hours key `${day}-${index}`;
+  console.warn added to previously-silent catches (leadAlerts/lastQuote/business/gallery). Verified false
+  positives NOT changed: `is None` idioms in google_sheets.py/server.py; hook deps (module constants/stable
+  setters — adding them risks loops).
+- **Dispatch Board (iteration 9, 80/80 backend + frontend 100%)**: LOCAL `assignments` collection (snapshot of
+  lead details since production untouchable): POST/GET/DELETE /api/assignments (admin), GET
+  /api/cleaners/{id}/jobs (X-Cleaner-Pin header), POST /api/assignments/{id}/done (cleaner), cascade delete on
+  cleaner removal, 1-assignment-per-quote (delete_many+insert). Admin lead cards: "Assign to cleaner" btn →
+  CleanerPicker.js bottom sheet → "Assigned to {name}" row with unassign X. Cleaner screen: "Your Jobs" section
+  (60s poll) with tappable address/phone + Mark Done; 401 during poll clears jobs + prompts re-checkin.
+- **Team Map View (iteration 9)**: AdminTeam List/Map toggle; TeamMap.js = raw Leaflet (yarn leaflet@1.9.4,
+  require() in effect, web-only w/ native fallback), Carto dark_all tiles, circleMarkers (green live/gray stale),
+  permanent name tooltips, fitBounds. leaflet.css copied to public/ + linked in +html.js.
+- Post-review polish applied: setError('') on assign/unassign, CleanerPicker inline error, pointerEvents via style.
+- **Dispatch button (owner request)**: violet "Dispatch" pill in Home top bar (testid dispatch-btn, replaced the
+  Edmonton chip) → /admin; app remembers admin password after first login so it's one tap. Self-tested via
+  Playwright (button → login → board).
+- **Iteration 10 (92/92 backend + frontend 100%)** — three features:
+  - **Job status updates**: assignments lifecycle assigned→on_the_way→cleaning→done via POST
+    /api/assignments/{id}/status (cleaner PIN auth; sets status_updated_at, completed_at on done); cleaner job
+    cards show 3-step status row (JOB_STEPS in cleaner.js, testids cleaner-job-{status}-{i}); jobs filter now
+    $in[assigned,on_the_way,cleaning]; admin lead cards show status pill (STATUS_META: violet/gold/green);
+    assignments auto-poll every 30s on Leads tab. Legacy /done endpoint kept.
+  - **Daily summary**: DailySummary card atop Leads tab (Today's Leads / Active Jobs (status!=done) / Done Today,
+    testids summary-*), computed client-side from leads + full assignmentList state.
+  - **Dispatch password change**: ARCHITECTURE CHANGE — app admin login + leads now hit LOCAL backend
+    (/api/admin/login, new GET /api/leads proxy that relays production /api/quotes using backend/.env
+    PRODUCTION_API_URL + PRODUCTION_ADMIN_PASSWORD via run_in_threadpool). Local password: ADMIN_PW_CACHE
+    (env default, DB override app_settings key="security", loaded at startup, updated on PUT /api/admin/password,
+    min 6 chars). Business tab "Dispatch Password" card (admin-pw-new/confirm/save); on success updates
+    AsyncStorage + parent storedPw via onPasswordChanged. NOTE: cache is process-local — fine single-worker;
+    multi-worker would need per-request DB read.
