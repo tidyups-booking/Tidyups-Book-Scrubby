@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, FONTS } from '../constants/theme';
-import { checkinCleaner, sendCleanerLocation, stopCleanerSharing } from '../lib/api';
+import { checkinCleaner, sendCleanerLocation, stopCleanerSharing, fetchCleanerJobs, setAssignmentStatus } from '../lib/api';
 import { GradientButton, OutlineButton } from '../components/ui';
+import CleanerJobs from '../components/CleanerJobs';
 
 const PROFILE_KEY = 'tidyups_cleaner';
 
@@ -21,7 +22,30 @@ export default function CleanerScreen() {
   const [sharing, setSharing] = useState(false);
   const [lastSent, setLastSent] = useState(null);
   const [error, setError] = useState('');
+  const [jobs, setJobs] = useState([]);
   const watchRef = useRef(null);
+
+  const loadJobs = useCallback(async (p) => {
+    if (!p) return;
+    try {
+      const data = await fetchCleanerJobs(p.cleaner_id, p.pin);
+      setJobs(Array.isArray(data) ? data : []);
+    } catch (e) {
+      if (e.code === 401) {
+        setJobs([]);
+        setError('The cleaner PIN was changed — please sign out and check in again.');
+      } else if (__DEV__) {
+        console.warn('Jobs load failed:', e.message || e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!profile) return;
+    loadJobs(profile);
+    const timer = setInterval(() => loadJobs(profile), 60000);
+    return () => clearInterval(timer);
+  }, [profile, loadJobs]);
 
   useEffect(() => {
     AsyncStorage.getItem(PROFILE_KEY)
@@ -90,7 +114,7 @@ export default function CleanerScreen() {
         (p) => sendPing(profile, p.coords)
       );
       setSharing(true);
-    } catch (e) {
+    } catch {
       setError('Could not get your location — check GPS is on and try again.');
     } finally {
       setBusy(false);
@@ -102,6 +126,24 @@ export default function CleanerScreen() {
     stopCleanerSharing(profile.cleaner_id, profile.pin).catch(() => {});
   };
 
+  const onJobStatus = async (job, status) => {
+    setError('');
+    try {
+      await setAssignmentStatus(job.id, profile.cleaner_id, profile.pin, status);
+      if (status === 'done') {
+        setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      } else {
+        setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, status } : j)));
+      }
+    } catch (e) {
+      setError(e.message || 'Could not update status');
+    }
+  };
+
+  const onJobChange = (updated) => {
+    setJobs((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
+  };
+
   const onSignout = async () => {
     onStop();
     await AsyncStorage.removeItem(PROFILE_KEY);
@@ -110,6 +152,7 @@ export default function CleanerScreen() {
     setPin('');
     setError('');
     setLastSent(null);
+    setJobs([]);
   };
 
   if (checking) {
@@ -163,50 +206,53 @@ export default function CleanerScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.wrap}>
-        <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()} testID="cleaner-close">
-          <Ionicons name="close" size={22} color={COLORS.textMuted} />
-        </TouchableOpacity>
-
-        <View style={[styles.statusDot, sharing ? styles.dotLive : styles.dotIdle]} />
-        <Text style={styles.title} testID="cleaner-status">
-          {sharing ? "You're live!" : `Hi, ${profile.name.split(' ')[0]}!`}
-        </Text>
-        <Text style={styles.sub}>
-          {sharing
-            ? `Dispatch can see your live location.${lastSent ? ` Last update ${lastSent.toLocaleTimeString()}.` : ''} Keep this screen open while you travel.`
-            : 'Tap below when you head to a job site so dispatch can see you on the way.'}
-        </Text>
-
-        {error ? (
-          <Text style={styles.error} testID="cleaner-error">
-            {error}
+      <TouchableOpacity style={[styles.closeBtn, { zIndex: 10 }]} onPress={() => router.back()} testID="cleaner-close">
+        <Ionicons name="close" size={22} color={COLORS.textMuted} />
+      </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.scrollWrap} showsVerticalScrollIndicator={false}>
+        <View style={{ alignItems: 'center' }}>
+          <View style={[styles.statusDot, sharing ? styles.dotLive : styles.dotIdle]} />
+          <Text style={styles.title} testID="cleaner-status">
+            {sharing ? "You're live!" : `Hi, ${profile.name.split(' ')[0]}!`}
           </Text>
-        ) : null}
+          <Text style={styles.sub}>
+            {sharing
+              ? `Dispatch can see your live location.${lastSent ? ` Last update ${lastSent.toLocaleTimeString()}.` : ''} Keep this screen open while you travel.`
+              : 'Tap below when you head to a job site so dispatch can see you on the way.'}
+          </Text>
 
-        {sharing ? (
-          <OutlineButton
-            title="Stop Sharing"
-            testID="cleaner-stop-btn"
-            icon={<Ionicons name="stop-circle" size={18} color={COLORS.danger} />}
-            onPress={onStop}
-            style={{ alignSelf: 'stretch', borderColor: 'rgba(248,113,113,0.4)' }}
-          />
-        ) : (
-          <GradientButton
-            title="Start Sharing Location"
-            testID="cleaner-start-btn"
-            loading={busy}
-            icon={<Ionicons name="navigate" size={18} color="#fff" />}
-            onPress={onStart}
-            style={{ alignSelf: 'stretch' }}
-          />
-        )}
+          {error ? (
+            <Text style={styles.error} testID="cleaner-error">
+              {error}
+            </Text>
+          ) : null}
+
+          {sharing ? (
+            <OutlineButton
+              title="Stop Sharing"
+              testID="cleaner-stop-btn"
+              icon={<Ionicons name="stop-circle" size={18} color={COLORS.danger} />}
+              onPress={onStop}
+              style={{ alignSelf: 'stretch', borderColor: 'rgba(248,113,113,0.4)' }}
+            />
+          ) : (
+            <GradientButton
+              title="Start Sharing Location"
+              testID="cleaner-start-btn"
+              loading={busy}
+              icon={<Ionicons name="navigate" size={18} color="#fff" />}
+              onPress={onStart}
+              style={{ alignSelf: 'stretch' }}
+            />
+          )}
+        </View>
+
+        <CleanerJobs jobs={jobs} onStatus={onJobStatus} cleaner={profile} onJobChange={onJobChange} setError={setError} />
 
         <TouchableOpacity style={styles.signout} onPress={onSignout} testID="cleaner-signout">
           <Text style={styles.signoutText}>Sign out ({profile.name})</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -247,4 +293,5 @@ const styles = StyleSheet.create({
   },
   signout: { marginTop: 22, padding: 8 },
   signoutText: { color: COLORS.textMuted, fontFamily: FONTS.bodyMedium, fontSize: 13 },
+  scrollWrap: { paddingHorizontal: 24, paddingTop: 70, paddingBottom: 40 },
 });

@@ -2,6 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Header, UploadFile, File,
 from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import asyncio
@@ -220,8 +221,17 @@ async def create_quote(payload: QuoteCreate):
     return quote
 
 
+ADMIN_PW_CACHE = {"value": os.environ.get('ADMIN_PASSWORD')}
+
+
+async def _load_admin_password():
+    doc = await db.app_settings.find_one({"key": "security"})
+    if doc and doc.get("admin_password"):
+        ADMIN_PW_CACHE["value"] = doc["admin_password"]
+
+
 def _check_admin(password: Optional[str]):
-    expected = os.environ.get('ADMIN_PASSWORD')
+    expected = ADMIN_PW_CACHE["value"]
     if not expected or password != expected:
         raise HTTPException(status_code=401, detail="Invalid admin password")
 
@@ -237,6 +247,50 @@ async def list_quotes(x_admin_password: Optional[str] = Header(default=None)):
 async def admin_login(x_admin_password: Optional[str] = Header(default=None)):
     _check_admin(x_admin_password)
     return {"ok": True}
+
+
+class AdminPasswordUpdate(BaseModel):
+    new_password: str
+
+
+@api_router.put("/admin/password")
+async def change_admin_password(payload: AdminPasswordUpdate, x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    new_pw = payload.new_password.strip()
+    if len(new_pw) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    await db.app_settings.update_one({"key": "security"}, {"$set": {"admin_password": new_pw}}, upsert=True)
+    ADMIN_PW_CACHE["value"] = new_pw
+    return {"ok": True}
+
+
+PRODUCTION_API_URL = os.environ.get('PRODUCTION_API_URL', '').rstrip('/')
+PRODUCTION_ADMIN_PASSWORD = os.environ.get('PRODUCTION_ADMIN_PASSWORD', '')
+
+
+@api_router.get("/leads")
+async def proxy_leads(x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    if not PRODUCTION_API_URL:
+        raise HTTPException(status_code=500, detail="Leads source not configured")
+
+    def _fetch():
+        return requests.get(
+            f"{PRODUCTION_API_URL}/api/quotes",
+            headers={"X-Admin-Password": PRODUCTION_ADMIN_PASSWORD},
+            timeout=15,
+        )
+
+    try:
+        resp = await run_in_threadpool(_fetch)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail="Leads server error")
+        return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Leads proxy failed: %s", e)
+        raise HTTPException(status_code=502, detail="Could not reach the leads server")
 
 
 # ---------------- Google Sheets Sync ----------------
@@ -414,9 +468,9 @@ async def reorder_site_images(payload: ReorderPayload, x_admin_password: Optiona
 async def serve_site_image(path: str):
     try:
         data, content_type = get_object(path)
+        return Response(content=data, media_type=content_type, headers={"Cache-Control": "public, max-age=86400"})
     except Exception:
         raise HTTPException(status_code=404, detail="Image not found")
-    return Response(content=data, media_type=content_type, headers={"Cache-Control": "public, max-age=86400"})
 
 
 # ---------------- App (Mobile) Images ----------------
@@ -529,9 +583,9 @@ async def reorder_app_images(payload: ReorderPayload, x_admin_password: Optional
 async def serve_app_image(path: str):
     try:
         data, content_type = get_object(path)
+        return Response(content=data, media_type=content_type, headers={"Cache-Control": "public, max-age=86400"})
     except Exception:
         raise HTTPException(status_code=404, detail="Image not found")
-    return Response(content=data, media_type=content_type, headers={"Cache-Control": "public, max-age=86400"})
 
 
 class ImageFitPayload(BaseModel):
@@ -564,6 +618,7 @@ DEFAULT_BUSINESS = {
         {"day": "Sunday", "time": "Closed"},
     ],
     "logo_url": None,
+    "review_url": "",
 }
 
 
@@ -587,6 +642,7 @@ class BusinessSettingsUpdate(BaseModel):
     city_line: Optional[str] = None
     website: Optional[str] = None
     hours: Optional[List[HoursRow]] = None
+    review_url: Optional[str] = None
 
 
 async def _get_business_merged():
@@ -758,7 +814,260 @@ async def delete_cleaner(cleaner_id: str, x_admin_password: Optional[str] = Head
     res = await db.cleaners.delete_one({"id": cleaner_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Cleaner not found")
+    await db.assignments.delete_many({"cleaner_id": cleaner_id})
     return {"ok": True}
+
+
+# ---------------- Job Assignments (Dispatch) ----------------
+class AssignmentCreate(BaseModel):
+    quote_id: str
+    cleaner_id: str
+    customer_name: str
+    service_type: str
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    preferred_date: Optional[str] = None
+    message: Optional[str] = None
+
+
+class AssignmentDone(BaseModel):
+    cleaner_id: str
+    pin: str
+
+
+ASSIGNMENT_FIELDS = ("id", "quote_id", "cleaner_id", "cleaner_name", "customer_name", "service_type",
+                     "address", "phone", "preferred_date", "message", "status", "created_at",
+                     "status_updated_at", "completed_at", "photos", "review_sent_at")
+
+
+def _clean_assignment(doc):
+    out = {k: doc.get(k) for k in ASSIGNMENT_FIELDS}
+    out["photos"] = out.get("photos") or []
+    return out
+
+
+@api_router.post("/assignments")
+async def create_assignment(payload: AssignmentCreate, x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    cleaner = await db.cleaners.find_one({"id": payload.cleaner_id})
+    if not cleaner:
+        raise HTTPException(status_code=404, detail="Cleaner not found")
+    doc = {
+        "id": str(uuid.uuid4()),
+        **payload.model_dump(),
+        "cleaner_name": cleaner["name"],
+        "status": "assigned",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.assignments.delete_many({"quote_id": payload.quote_id, "status": {"$ne": "done"}})
+    await db.assignments.insert_one(doc)
+    return _clean_assignment(doc)
+
+
+@api_router.get("/assignments")
+async def list_assignments(x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    docs = await db.assignments.find({}).sort("created_at", -1).to_list(500)
+    return [_clean_assignment(d) for d in docs]
+
+
+@api_router.delete("/assignments/{assignment_id}")
+async def delete_assignment(assignment_id: str, x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    res = await db.assignments.delete_one({"id": assignment_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return {"ok": True}
+
+
+@api_router.get("/cleaners/{cleaner_id}/jobs")
+async def cleaner_jobs(cleaner_id: str, x_cleaner_pin: Optional[str] = Header(default=None)):
+    _check_pin(x_cleaner_pin, await _get_cleaner_pin())
+    docs = await db.assignments.find(
+        {"cleaner_id": cleaner_id, "status": {"$in": ["assigned", "on_the_way", "cleaning"]}}
+    ).sort("created_at", -1).to_list(100)
+    return [_clean_assignment(d) for d in docs]
+
+
+class AssignmentStatusUpdate(BaseModel):
+    cleaner_id: str
+    pin: str
+    status: str
+
+
+@api_router.post("/assignments/{assignment_id}/status")
+async def update_assignment_status(assignment_id: str, payload: AssignmentStatusUpdate):
+    _check_pin(payload.pin, await _get_cleaner_pin())
+    if payload.status not in ("on_the_way", "cleaning", "done"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    updates = {"status": payload.status, "status_updated_at": datetime.now(timezone.utc).isoformat()}
+    if payload.status == "done":
+        updates["completed_at"] = updates["status_updated_at"]
+    res = await db.assignments.update_one({"id": assignment_id, "cleaner_id": payload.cleaner_id}, {"$set": updates})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if payload.status == "done":
+        doc = await db.assignments.find_one({"id": assignment_id}, {"_id": 0})
+        if doc and not doc.get("review_sent_at"):
+            asyncio.create_task(_auto_send_review(doc))
+    return {"ok": True, "status": payload.status}
+
+
+@api_router.post("/assignments/{assignment_id}/done")
+async def complete_assignment(assignment_id: str, payload: AssignmentDone):
+    _check_pin(payload.pin, await _get_cleaner_pin())
+    res = await db.assignments.update_one(
+        {"id": assignment_id, "cleaner_id": payload.cleaner_id},
+        {"$set": {"status": "done", "completed_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    doc = await db.assignments.find_one({"id": assignment_id}, {"_id": 0})
+    if doc and not doc.get("review_sent_at"):
+        asyncio.create_task(_auto_send_review(doc))
+    return {"ok": True}
+
+
+# ---------------- Job History ----------------
+@api_router.get("/assignments/history")
+async def assignments_history(
+    cleaner_id: Optional[str] = None,
+    limit: int = 100,
+    x_admin_password: Optional[str] = Header(default=None),
+):
+    _check_admin(x_admin_password)
+    limit = max(1, min(limit, 500))
+    query = {"status": "done"}
+    if cleaner_id:
+        query["cleaner_id"] = cleaner_id
+    docs = await db.assignments.find(query).sort("completed_at", -1).to_list(limit)
+    return [_clean_assignment(d) for d in docs]
+
+
+# ---------------- Photo Proof ----------------
+@api_router.post("/assignments/{assignment_id}/photos")
+async def upload_assignment_photo(
+    assignment_id: str,
+    file: UploadFile = File(...),
+    kind: str = Form(...),
+    cleaner_id: str = Form(...),
+    pin: str = Form(...),
+):
+    _check_pin(pin, await _get_cleaner_pin())
+    if kind not in ("before", "after"):
+        raise HTTPException(status_code=400, detail="kind must be 'before' or 'after'")
+    assignment = await db.assignments.find_one({"id": assignment_id, "cleaner_id": cleaner_id})
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    ext = (file.filename.rsplit(".", 1)[-1] if "." in file.filename else "jpg").lower()
+    content_type = MIME_TYPES.get(ext, file.content_type or "image/jpeg")
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo too large (max 10MB)")
+    storage_path = f"{APP_NAME}/proof/{assignment_id}/{uuid.uuid4()}.{ext}"
+    try:
+        result = await run_in_threadpool(put_object, storage_path, data, content_type)
+    except Exception as e:
+        logger.error("Photo upload failed: %s", e)
+        raise HTTPException(status_code=502, detail="Photo upload failed. Please try again.")
+    stored_path = result.get("path", storage_path)
+    photo = {
+        "id": str(uuid.uuid4()),
+        "kind": kind,
+        "url": f"/api/app-images/file/{stored_path}",
+        "storage_path": stored_path,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.assignments.update_one({"id": assignment_id}, {"$push": {"photos": photo}})
+    return photo
+
+
+@api_router.delete("/assignments/{assignment_id}/photos/{photo_id}")
+async def delete_assignment_photo(
+    assignment_id: str,
+    photo_id: str,
+    cleaner_id: str,
+    pin: str,
+):
+    _check_pin(pin, await _get_cleaner_pin())
+    res = await db.assignments.update_one(
+        {"id": assignment_id, "cleaner_id": cleaner_id},
+        {"$pull": {"photos": {"id": photo_id}}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return {"ok": True}
+
+
+# ---------------- Review Requests ----------------
+async def _get_review_url():
+    merged = await _get_business_merged()
+    return (merged.get("review_url") or "").strip()
+
+
+def _send_review_sms(phone: str, customer_name: str, review_url: str) -> bool:
+    sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    token = os.environ.get("TWILIO_AUTH_TOKEN")
+    from_number = os.environ.get("TWILIO_FROM_NUMBER")
+    if not all([sid, token, from_number]):
+        logger.warning("Twilio not fully configured; skipping review SMS")
+        return False
+    digits = re.sub(r"\D", "", phone or "")
+    if len(digits) == 10:
+        digits = "1" + digits
+    if len(digits) < 11:
+        logger.warning("Invalid phone for review SMS: %s", phone)
+        return False
+    to = f"+{digits}"
+    first = (customer_name or "there").split()[0]
+    body = (
+        f"Hi {first}, thanks for choosing Tidyups Cleaning! "
+        f"We'd love to hear how we did — a quick Google review helps our small team a lot: {review_url}"
+    )
+    try:
+        TwilioClient(sid, token).messages.create(body=body, from_=from_number, to=to)
+        logger.info("Review SMS sent to %s", to)
+        return True
+    except Exception as e:
+        logger.error("Review SMS failed: %s", e)
+        return False
+
+
+async def _auto_send_review(assignment: dict):
+    if not assignment.get("phone"):
+        return
+    review_url = await _get_review_url()
+    if not review_url:
+        return
+    sent = await run_in_threadpool(
+        _send_review_sms, assignment["phone"], assignment.get("customer_name", ""), review_url
+    )
+    if sent:
+        await db.assignments.update_one(
+            {"id": assignment["id"]},
+            {"$set": {"review_sent_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+
+@api_router.post("/assignments/{assignment_id}/send-review")
+async def send_review_request(assignment_id: str, x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    assignment = await db.assignments.find_one({"id": assignment_id}, {"_id": 0})
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if not assignment.get("phone"):
+        raise HTTPException(status_code=400, detail="No customer phone on record")
+    review_url = await _get_review_url()
+    if not review_url:
+        raise HTTPException(status_code=400, detail="Set a Google review link in Business settings first")
+    sent = await run_in_threadpool(
+        _send_review_sms, assignment["phone"], assignment.get("customer_name", ""), review_url
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    await db.assignments.update_one({"id": assignment_id}, {"$set": {"review_sent_at": now}})
+    return {"ok": True, "sent_via_sms": sent, "review_sent_at": now, "review_url": review_url}
 
 
 app.include_router(api_router)
@@ -781,6 +1090,7 @@ async def on_startup():
         logger.error("Storage init failed: %s", e)
     await seed_site_images()
     await seed_app_images()
+    await _load_admin_password()
 
 
 @app.on_event("shutdown")

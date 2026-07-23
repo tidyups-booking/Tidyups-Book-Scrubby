@@ -27,7 +27,7 @@ export async function requestLeadNotifPermission() {
       await Notifications.requestPermissionsAsync();
     }
   } catch (e) {
-    // best effort
+    if (__DEV__) console.warn('Notification permission request failed:', e);
   }
 }
 
@@ -43,7 +43,7 @@ async function notifyNewLeads(count, newest) {
       await Notifications.scheduleNotificationAsync({ content: { title, body }, trigger: null });
     }
   } catch (e) {
-    // best effort
+    if (__DEV__) console.warn('Lead notification failed:', e);
   }
 }
 
@@ -66,7 +66,11 @@ export function useLeadAlerts() {
           await AsyncStorage.setItem(LAST_SEEN_KEY, newest.created_at);
         }
       } catch (e) {
-        // silent — retry next tick
+        if (e && e.code === 401) {
+          await AsyncStorage.removeItem('tidyups_admin_pw');
+          return;
+        }
+        if (__DEV__) console.warn('Lead poll failed (will retry):', e.message || e);
       }
     };
     tick();

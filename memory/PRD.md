@@ -59,14 +59,65 @@ Original build spec: /app/MOBILE_APP_SPEC.md.
   Fix in place: package.json start script is `CI=1 expo start --web --port 3000` (watching disabled).
   **NO HOT RELOAD on frontend** — after any frontend code change run `sudo supervisorctl restart frontend` and wait ~25s.
 
+## Done (Feb 23, 2026 session — Job History + Photo Proof + Review Requests, iteration 12: 103/103 backend + frontend 100%)
+- **Job History (admin)** — new "History" tab (5th admin segment): browsable list of DONE assignments,
+  filterable by cleaner (chip row). Each card shows customer, service, address, phone, completed timestamp,
+  photo counts (before/after), and a "Send Google review link" CTA. Long tap thumbnails opens a fullscreen
+  photo viewer modal. Backend: `GET /api/assignments/history?cleaner_id=<opt>&limit=100` (admin), returns
+  status=done sorted by completed_at desc.
+- **Photo Proof (cleaner)** — Before/After PhotoRow blocks on every active job card. On mobile uses camera
+  (`launchCameraAsync`); on web falls back to file picker (`launchImageLibraryAsync`). Long-press or tap the
+  X on a thumbnail to remove. Photos live inside the assignment doc as
+  `photos:[{id,kind:'before'|'after',url,storage_path,uploaded_at}]`. Backend endpoints:
+  `POST /api/assignments/{id}/photos` (multipart: file+kind+cleaner_id+pin) and
+  `DELETE /api/assignments/{id}/photos/{photo_id}?cleaner_id=&pin=` (both PIN-gated).
+- **Review Requests** — new Business tab card "Review Requests" with `admin-biz-review-url` field for the
+  Google review link. Backend: `review_url` added to DEFAULT_BUSINESS + BusinessSettingsUpdate; when a
+  cleaner marks a job done via `/status`, `_auto_send_review` fires (Twilio SMS via existing config +
+  customer phone + business review_url). Manual re-send: `POST /api/assignments/{id}/send-review` (admin)
+  returns `{sent_via_sms, review_sent_at, review_url}`. In preview Twilio isn't configured →
+  `sent_via_sms:false` is expected; the admin can still copy the link.
+- New tests: `test_history_photos_reviews.py` (10 tests: review_url set/get, history done-only + filter +
+  401, photo upload rejects wrong pin/invalid kind + accepts before/after, photo delete, send-review admin
+  auth + 400 without url + 200 marks review_sent_at).
+- Iteration 12 result: 103/103 backend pytest, frontend 100% (Playwright verified admin 5-tab layout
+  at 420px width, History tab + filter + review send flow, Business review_url save+persist, cleaner
+  check-in + Before/After Upload buttons all working). Zero regressions on 93 existing tests.
+- **Advisory (non-blocking, not fixed to keep changes minimal)**: send-review sets `review_sent_at` even
+  when Twilio isn't configured (returns `sent_via_sms:false`). Admin sees "Review sent Nm ago" pill
+  regardless of whether SMS actually went out; the response payload includes the truth.
+
+## Done (June 24, 2026 session — code review + fixes, iteration 11: 93/93 backend, frontend 100%)
+- Ran code_review_agent on deployed codebase → verdict READY WITH FIXES (1 MEDIUM, 4 LOW). All fixed + tested:
+  - **MEDIUM — completed jobs vanished from dispatch board**: STATUS_META now includes done:'Completed' (green);
+    LeadCard shows Completed pill + check-circle, hides unassign X, shows "Assign again" button (repeat icon).
+    admin.js loadAssignments maps ALL assignments (active preferred over done per quote_id). Backend
+    create_assignment now delete_many({quote_id, status:{$ne:'done'}}) → done history preserved on re-assign,
+    "Done Today" counter no longer drops. New pytest: test_re_assign_after_done_preserves_history.
+  - LOW fixes: removed dead completeAssignment from api.js (legacy /done endpoint kept on backend — tests use it);
+    leadAlerts poll now clears stored admin pw on 401; unused catch bindings removed (AdminImages, cleaner.js,
+    api.js formatDate). oxlint: 0 warnings 0 errors.
+- Iteration 11 also retro-verified the previously-UNTESTED session-13 refactor (AdminLogin.js / LeadCard.js /
+  CleanerJobs.js extractions) — no regressions, all admin tabs + cleaner flow work end-to-end.
+- **PRODUCTION NOTE**: user redeployed (bookscrubby.com) BEFORE these fixes landed — production still has the
+  pre-fix code. Another redeploy is needed to ship the completed-jobs fix.
+- Known advisory notes from iter 11 (not bugs): done records grow unbounded per quote (consider archival later);
+  re-assign while a cleaner is mid-'cleaning' silently replaces their job; 30s poll refreshes assignments only.
+
 ## Backlog
 - P1: Native builds via EAS — CONFIG READY (eas.json, plugins, guide at /app/STORE_SUBMISSION_GUIDE.md). User has
   both Apple + Google dev accounts; they run `eas build`/`eas submit` from their machine (needs their Expo login).
+- P1 (unlocks review SMS in production): set TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER in
+  the LOCAL backend `.env` (production deploy). Once set, marking a job done or tapping "Send Google review
+  link" texts the customer their Google review URL automatically.
 - P2: True push notifications + background location for cleaners — bundle with native builds (foreground
   polling/sharing already works everywhere).
-- P3 (code health, from testing agent review): split server.py (~790 lines) into modules; wrap put_object/get_object
-  in run_in_threadpool; hard-delete orphaned storage blobs; themed confirm dialogs instead of window.confirm;
-  stale-ping warning on cleaner screen; pause AdminTeam polling when tab hidden; all-cleaners-on-one-map view.
+- P3 (code health, from testing agent review): split server.py (~1050 lines) into modules; wrap put_object/get_object
+  in run_in_threadpool (partially done for photo upload); hard-delete orphaned storage blobs on assignment/photo
+  delete; themed confirm dialogs instead of window.confirm; stale-ping warning on cleaner screen; pause
+  AdminTeam polling when tab hidden; assignment upsert w/ unique quote_id index; Field(max_length) on
+  AssignmentCreate; dynamic import() for leaflet; skip fitBounds when cleaner set unchanged;
+  AdminHistory catch on cleaners fetch is silent — surface a subtle hint.
 
 ## Done (June 21, 2026 session)
 - Admin "Business" tab: editable logo (upload/reset), phone, toll-free, address, website, hours — live app-wide.
@@ -89,3 +140,38 @@ Original build spec: /app/MOBILE_APP_SPEC.md.
   with their Expo login), /app/PRIVACY_POLICY.md (host at tidyupscleaning.com/privacy for store listings).
 - All tested: iteration_6.json (19/19 + 100%), iteration_7.json (20/20 + 100%), Book Again self-tested via
   Playwright with network interception (no production quote ever submitted).
+- **Code-quality pass (iteration 8, all verified — 68/68 backend, 0 console errors)**: removed both
+  dangerouslySetInnerHTML in +html.js (style → string child; SW registration → public/register-sw.js);
+  test files read ADMIN_PASSWORD from env via conftest (no hardcoded creds); serve_site_image/serve_app_image
+  return moved inside try; `is True/False` assertions → truthiness; contact.js hours key `${day}-${index}`;
+  console.warn added to previously-silent catches (leadAlerts/lastQuote/business/gallery). Verified false
+  positives NOT changed: `is None` idioms in google_sheets.py/server.py; hook deps (module constants/stable
+  setters — adding them risks loops).
+- **Dispatch Board (iteration 9, 80/80 backend + frontend 100%)**: LOCAL `assignments` collection (snapshot of
+  lead details since production untouchable): POST/GET/DELETE /api/assignments (admin), GET
+  /api/cleaners/{id}/jobs (X-Cleaner-Pin header), POST /api/assignments/{id}/done (cleaner), cascade delete on
+  cleaner removal, 1-assignment-per-quote (delete_many+insert). Admin lead cards: "Assign to cleaner" btn →
+  CleanerPicker.js bottom sheet → "Assigned to {name}" row with unassign X. Cleaner screen: "Your Jobs" section
+  (60s poll) with tappable address/phone + Mark Done; 401 during poll clears jobs + prompts re-checkin.
+- **Team Map View (iteration 9)**: AdminTeam List/Map toggle; TeamMap.js = raw Leaflet (yarn leaflet@1.9.4,
+  require() in effect, web-only w/ native fallback), Carto dark_all tiles, circleMarkers (green live/gray stale),
+  permanent name tooltips, fitBounds. leaflet.css copied to public/ + linked in +html.js.
+- Post-review polish applied: setError('') on assign/unassign, CleanerPicker inline error, pointerEvents via style.
+- **Dispatch button (owner request)**: violet "Dispatch" pill in Home top bar (testid dispatch-btn, replaced the
+  Edmonton chip) → /admin; app remembers admin password after first login so it's one tap. Self-tested via
+  Playwright (button → login → board).
+- **Iteration 10 (92/92 backend + frontend 100%)** — three features:
+  - **Job status updates**: assignments lifecycle assigned→on_the_way→cleaning→done via POST
+    /api/assignments/{id}/status (cleaner PIN auth; sets status_updated_at, completed_at on done); cleaner job
+    cards show 3-step status row (JOB_STEPS in cleaner.js, testids cleaner-job-{status}-{i}); jobs filter now
+    $in[assigned,on_the_way,cleaning]; admin lead cards show status pill (STATUS_META: violet/gold/green);
+    assignments auto-poll every 30s on Leads tab. Legacy /done endpoint kept.
+  - **Daily summary**: DailySummary card atop Leads tab (Today's Leads / Active Jobs (status!=done) / Done Today,
+    testids summary-*), computed client-side from leads + full assignmentList state.
+  - **Dispatch password change**: ARCHITECTURE CHANGE — app admin login + leads now hit LOCAL backend
+    (/api/admin/login, new GET /api/leads proxy that relays production /api/quotes using backend/.env
+    PRODUCTION_API_URL + PRODUCTION_ADMIN_PASSWORD via run_in_threadpool). Local password: ADMIN_PW_CACHE
+    (env default, DB override app_settings key="security", loaded at startup, updated on PUT /api/admin/password,
+    min 6 chars). Business tab "Dispatch Password" card (admin-pw-new/confirm/save); on success updates
+    AsyncStorage + parent storedPw via onPasswordChanged. NOTE: cache is process-local — fine single-worker;
+    multi-worker would need per-request DB read.
