@@ -11,7 +11,10 @@
     "backgroundColor": "#0A0611",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tidyups.cleaning"
+      "bundleIdentifier": "com.tidyups.cleaning",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.tidyups.cleaning",
