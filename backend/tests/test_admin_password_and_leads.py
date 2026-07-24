@@ -265,6 +265,8 @@ class TestAssignmentStatus:
                                  headers={"X-Admin-Password": ORIGINAL_PW}).json()
             row = next(x for x in admin_list if x["id"] == a["id"])
             assert row["status"] == "done"
+            assert row["completed_at"] is not None
+            assert row["status_updated_at"] is not None
         finally:
             requests.delete(f"{BASE_URL}/api/assignments/{a['id']}",
                             headers={"X-Admin-Password": ORIGINAL_PW})
