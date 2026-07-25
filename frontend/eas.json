@@ -25,6 +25,7 @@
     "production": {
       "ios": {
         "appleId": "support@bookscrubby.com",
+        "ascAppId": "6792950350",
         "appleTeamId": "577Q74XH78"
       },
       "android": {
