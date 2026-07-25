@@ -23,7 +23,14 @@
   },
   "submit": {
     "production": {
-      "ios": {}
+      "ios": {
+        "appleId": "support@bookscrubby.com",
+        "appleTeamId": "577Q74XH78"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "production"
+      }
     }
   }
 }
