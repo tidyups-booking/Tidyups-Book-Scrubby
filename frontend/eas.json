@@ -26,9 +26,9 @@
       "ios": {
         "appleId": "support@bookscrubby.com",
         "ascAppId": "6792950350",
-        "ascApiKeyId": "7OXOC0IMEUAV",
+        "ascApiKeyId": "676XW385F6",
         "ascApiKeyIssuerId": "207e2f58-9fab-4c4a-a87c-d292a1c2aaaa",
-        "ascApiKeyPath": "../ApiKey_7OXOC0IMEUAV.p8",
+        "ascApiKeyPath": "./AuthKey_676XW385F6.p8",
         "appleTeamId": "577Q74XH78"
       },
       "android": {

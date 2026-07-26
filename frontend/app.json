@@ -1,6 +1,6 @@
 {
   "expo": {
-    "owner": "book-scrubby",
+    "owner": "tidyupsbooking-2",
     "name": "Tidyups Cleaning",
     "slug": "tidyups-cleaning",
     "version": "1.0.0",
@@ -57,7 +57,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "97c4d8ba-f6c2-48f8-8bcc-a2021d662d76"
+        "projectId": "5f85648d-6f7d-436c-a0b1-87c8ac217bd4"
       }
     }
   }
