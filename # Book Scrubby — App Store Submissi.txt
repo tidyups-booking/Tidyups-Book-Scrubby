@@ -1,0 +1,424 @@
+# Book Scrubby — App Store Submission Metadata
+## Complete Ready-to-Copy Content
+
+**Generated**: July 22, 2026  
+**Status**: ✅ Ready for Submission  
+**Platforms**: iOS App Store & Google Play
+
+---
+
+## 🎯 STORE LISTINGS QUICK COPY-PASTE
+
+### 1. APP TITLE
+```
+Book Scrubby
+```
+
+### 2. SUBTITLE (iOS Only)
+```
+Edmonton's Top Cleaning Crew
+```
+
+### 3. SHORT DESCRIPTION (iOS & Google Play)
+```
+Edmonton's top cleaning crew — free quotes in one tap. Sparkling spaces, zero hassle.
+```
+
+### 4. FULL DESCRIPTION
+
+**For iOS App Store:**
+```
+Sparkling spaces, zero hassle. Tidyups Cleaning Service brings Edmonton's 5-star residential and commercial cleaning to your pocket.
+
+SERVICES:
+Home Cleaning (weekly, bi-weekly, monthly)
+Deep Cleaning & Move-In/Move-Out
+Commercial & Office Cleaning
+Post-Construction Cleanup
+Airbnb Turnover
+Eco-Friendly Deep Clean
+And more!
+
+WHY TIDYUPS?
+Free quote in 60 seconds — no credit card needed
+2000+ happy clients
+15+ years of experience
+5.0-star rating
+Fully insured & bonded
+Eco-friendly products
+Satisfaction guaranteed
+One-tap calling & direct contact
+
+GET STARTED:
+1. Select your service type
+2. Tell us about your space
+3. Get your free quote instantly
+4. Call or book with one tap
+
+Call us: (780) 718-5092 | Toll-Free: 1-833-TIDY-UPS
+Website: https://bookscrubby.com
+
+Leave the mess to us!
+```
+
+**For Google Play:**
+```
+Sparkling spaces, zero hassle. Tidyups Cleaning Service brings Edmonton's 5-star residential and commercial cleaning to your pocket.
+
+SERVICES:
+Home Cleaning (weekly, bi-weekly, monthly)
+Deep Cleaning & Move-In/Move-Out
+Commercial & Office Cleaning
+Post-Construction Cleanup
+Airbnb Turnover
+Eco-Friendly Deep Clean
+And more!
+
+WHY TIDYUPS?
+Free quote in 60 seconds — no credit card needed
+2000+ happy clients
+15+ years of experience
+5.0-star rating
+Fully insured & bonded
+Eco-friendly products
+Satisfaction guaranteed
+One-tap calling & direct contact
+
+GET STARTED:
+1. Select your service type
+2. Tell us about your space
+3. Get your free quote instantly
+4. Call or book with one tap
+
+📞 Call us: (780) 718-5092
+☎️ Toll-Free: 1-833-TIDY-UPS
+🌐 Website: https://bookscrubby.com
+
+Leave the mess to us!
+```
+
+---
+
+## 🔑 KEYWORDS
+
+### iOS Keywords (paste into App Store Connect → Pricing and Availability → Keywords)
+```
+cleaning, house cleaning, maid, Edmonton, deep clean, move out, airbnb, office cleaning, home services, residential cleaning, commercial cleaning, eco-friendly, post construction, move in, cleaning service, recurring cleaning, Alberta, professional cleaning
+```
+
+### Google Play Keywords
+```
+cleaning
+house cleaning
+maid service
+Edmonton cleaning
+deep cleaning
+move-out cleaning
+office cleaning
+home services
+commercial cleaning
+eco-friendly cleaning
+post-construction
+cleaning company
+Alberta
+free quote
+```
+
+---
+
+## 📱 TECHNICAL METADATA
+
+### iOS App Store (App Store Connect)
+
+**General:**
+- Name: `Book Scrubby`
+- Subtitle: `Edmonton's Top Cleaning Crew`
+- Privacy Policy URL: `https://bookscrubby.com/privacy`
+- Support URL: `https://bookscrubby.com/support`
+- Marketing URL: `https://bookscrubby.com`
+- App URL (contact form): `https://bookscrubby.com/contact`
+
+**Primary Language:** English (Canada)
+
+**Category:** Lifestyle
+
+**Content Rating:**
+- Rated 4+ (no objectionable content)
+- Includes: App contains a form requesting contact information
+
+**Bundle ID:** `com.tidyups.cleaning`
+
+**Version:** `1.0`
+
+**Build:** (provided by EAS)
+
+**Required Capabilities:**
+- Location (for staff check-in feature)
+- Notifications (for booking confirmations)
+
+---
+
+### Google Play (Google Play Console)
+
+**General:**
+- Title: `Book Scrubby`
+- Short description: `Edmonton's trusted cleaning crew — free quotes in one tap.`
+- Privacy Policy: `https://bookscrubby.com/privacy`
+- Website: `https://bookscrubby.com`
+- Email: `support@bookscrubby.com`
+
+**Package Name:** `com.tidyups.cleaning`
+
+**Category:** House & Home
+
+**Content Rating:**
+- Category: App with contact collection
+- Contains: Name, phone, address fields (user-provided, for service delivery)
+- Ages: 3+ (Everyone)
+
+**Release Notes (Version 1.0):**
+```
+Welcome to Book Scrubby! 🎉
+
+Download our mobile app to browse Edmonton's trusted cleaning services, request a free quote in 60 seconds, and contact our team directly from your phone.
+
+✨ What's included:
+• Browse 9 service types
+• Free quote tool
+• Direct calling & messaging
+• Service portfolio
+• Contact information
+
+Leave the mess to us! Download now.
+```
+
+---
+
+## 🎨 ASSET SPECIFICATIONS
+
+### App Icon
+- **Format:** PNG or JPEG
+- **Size:** 1024 × 1024 pixels (minimum)
+- **Content:** Bunny mascot logo (use `Tidyups Cleaning Logo V3 2026`)
+- **Background:** Transparent or solid color (match brand)
+- **Corner Radius:** 20% (iOS will auto-round)
+- **Safe Zone:** Keep logo in center 60% of image
+
+**Icon URL Reference:**
+```
+https://customer-assets.emergentagent.com/job_tidyups-quote/artifacts/97bcjnmh_Tidyups%20Cleanin%20Logo%20V3%202026_edited.png
+```
+
+### App Splash Screen
+- **Format:** PNG or JPEG
+- **Size:** 1290 × 2796 pixels (for 6.5" iPhone)
+- **Content:** Logo + "Leave The Mess To Us!" tagline
+- **Background:** Dark gradient (#0A0611 → #150B22)
+- **Duration:** 1-2 seconds
+
+**Splash URL Reference:**
+```
+https://customer-assets.emergentagent.com/job_tidyups-quote/artifacts/j5vvr2zn_Tidyups%20Banner%202026%20V3_edited.jpg
+```
+
+### Screenshots (6-8 pieces, each 1290 × 2796 pixels)
+- See SCREENSHOT_GUIDE.md for full specifications
+- Export as PNG for best quality
+- Include text overlays with brand colors
+
+---
+
+## 📊 DATA SAFETY / APP PRIVACY SECTION
+
+### For iOS (App Privacy on App Store)
+
+**Data Types Collected:**
+1. **Contact Information** (Name, Phone, Email, Address)
+   - Purpose: Service delivery and quoting
+   - Linked to user: Yes
+   - Tracking: No
+   - Data deletion: User can request deletion
+
+2. **Location**
+   - Purpose: Dispatch coordination (staff only)
+   - Linked to user: Yes (staff members)
+   - Tracking: No
+   - Data deletion: Deleted after service completion
+
+**Data Security:**
+- Data is encrypted in transit (HTTPS)
+- Data is encrypted at rest
+
+**Third-Party Sharing:**
+- Data shared with: Cloud hosting provider, SMS service provider
+- For purpose: Service delivery and communication
+
+**Privacy Policy:** https://bookscrubby.com/privacy
+
+---
+
+### For Google Play (Data Safety Form)
+
+**Question: What personal and sensitive information does your app collect?**
+
+Answer:
+- Contact information (Name, Phone, Email, Address)
+- Location information (precise location, staff only)
+
+**Question: Is the data encrypted in transit?**
+Answer: Yes
+
+**Question: Is the data encrypted at rest?**
+Answer: Yes
+
+**Question: Can users request to have data deleted?**
+Answer: Yes (users can email support@bookscrubby.com)
+
+**Question: Is data shared with third parties?**
+Answer: Yes, only with essential service providers (cloud hosting, SMS)
+
+**Question: Is personal data used for ads or marketing?**
+Answer: No
+
+**Question: Is personal data shared or sold for other purposes?**
+Answer: No
+
+---
+
+## 🎯 SUBMISSION CHECKLIST
+
+### Before Uploading
+
+**Content:**
+- [ ] App title finalized
+- [ ] Description copy-pasted and proofread
+- [ ] Keywords verified
+- [ ] Screenshots created (6-8 at 1290×2796)
+- [ ] App icon prepared (1024×1024 PNG)
+- [ ] Splash screen ready
+- [ ] Privacy policy published and URL verified
+- [ ] Support email configured
+- [ ] Contact information current
+
+**Technical:**
+- [ ] App binary built (iOS .ipa or Android .aab)
+- [ ] Bundle ID correct (com.tidyups.cleaning)
+- [ ] Version number set (1.0)
+- [ ] Build number assigned
+- [ ] All permissions declared (location, notification)
+- [ ] Deep links tested
+- [ ] Phone numbers/links functional
+
+**Legal:**
+- [ ] Privacy policy reviewed by legal
+- [ ] Terms of service prepared (if applicable)
+- [ ] App accurately describes functionality
+- [ ] No misleading claims
+- [ ] Age rating appropriate
+
+**Marketing:**
+- [ ] Screenshots don't contain sensitive data
+- [ ] Brand colors and logo visible
+- [ ] CTAs clear and compelling
+- [ ] Screenshots tested on actual devices
+
+---
+
+## 🚀 SUBMISSION COMMANDS (EAS CLI)
+
+### Build for iOS
+```bash
+eas build --platform ios --profile production
+```
+
+### Build for Android
+```bash
+eas build --platform android --profile production
+```
+
+### Submit to App Store
+```bash
+eas submit --platform ios --latest
+```
+
+### Submit to Google Play
+```bash
+eas submit --platform android --latest
+```
+
+---
+
+## 📧 REVIEW TIMELINE
+
+**iOS App Store:**
+- Typical review time: 24-48 hours
+- Can take up to 5 business days during peak times
+- Will notify via email when approved or rejected
+- Common rejection reasons: Crash on launch, inaccurate description, missing privacy policy
+
+**Google Play:**
+- Typical review time: 2-4 hours
+- Can take up to 7 days for first submission
+- Will notify in Google Play Console
+- Usually quicker and more lenient than iOS
+
+---
+
+## ✉️ CONTACT INFO FOR SUPPORT/FOLLOW-UP
+
+**Tidyups Cleaning Service Inc.**
+
+📍 **Address:**  
+6510 Gateway Boulevard Suite 1020  
+Edmonton, AB T6H 5Z5, Canada
+
+📞 **Phone:**  
+Local: (780) 718-5092  
+Toll-Free: 1-833-TIDY-UPS (1-833-843-9877)
+
+📧 **Email:**  
+support@bookscrubby.com  
+privacy@bookscrubby.com
+
+🌐 **Website:**  
+https://bookscrubby.com
+
+⏰ **Hours:**  
+Monday–Friday: 8 AM – 6 PM  
+Saturday: 9 AM – 4 PM  
+Sunday: Closed (EST)
+
+---
+
+## 📋 FILES INCLUDED IN THIS PACKAGE
+
+1. **APPSTORE_LAUNCH_PACKAGE.md** — Complete launch overview
+2. **SCREENSHOT_GUIDE.md** — Detailed screenshot creation guide
+3. **privacy_policy.html** — Ready-to-publish HTML privacy policy
+4. **SUBMISSION_METADATA.txt** — This file (quick reference)
+
+---
+
+## 💡 PRO TIPS FOR APPROVAL
+
+✅ **Do:**
+- Be accurate and honest in your descriptions
+- Use high-quality screenshots
+- Test your app thoroughly before submission
+- Respond quickly to reviewer questions
+- Follow platform guidelines carefully
+
+❌ **Don't:**
+- Use placeholder text or images
+- Make false claims about features
+- Copy competitor descriptions
+- Hide permissions in small print
+- Submit before testing edge cases
+
+---
+
+**Ready to launch! 🎉**
+
+For questions, contact: support@bookscrubby.com
+
+Generated: July 22, 2026 | Version: 1.0
