@@ -1,4 +1,4 @@
-# Tidyups Book Scrubby repository instructions
+# Tidyups Book Scrubby Hostinger repository instructions
 
 ## Project layout
 
@@ -18,7 +18,8 @@
 
 ## Environment and secrets
 
-- The backend requires `MONGO_URL` and `DB_NAME`. Optional integrations use environment variables for object storage, Twilio, Google OAuth, production synchronization, admin access, and CORS.
+- This repository deploys only `tidyupsbooking.com` on Hostinger. Do not deploy it to the Emergent `bookscrubby.com` environment.
+- The backend requires `MONGO_URL` and `DB_NAME`. Optional integrations use environment variables for local object storage, Twilio, Google OAuth, admin access, and CORS.
 - The frontend reads public runtime configuration through `EXPO_PUBLIC_BACKEND_URL` and `EXPO_PUBLIC_IMAGES_URL`.
 - Never hardcode, print, commit, or modify real credentials, signing keys, certificates, provisioning profiles, tokens, or `.env` files. Treat credential-like and mobile-distribution artifacts in the working tree as sensitive and unrelated unless explicitly requested.
 
