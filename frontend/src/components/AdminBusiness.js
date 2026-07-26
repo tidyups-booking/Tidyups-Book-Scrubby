@@ -79,9 +79,21 @@ export default function AdminBusiness({ password, onPasswordChanged }) {
     setError('');
     setSuccess('');
     try {
+      const pw1 = newPw.trim();
+      const pw2 = confirmPw.trim();
+      if (pw1 || pw2) {
+        if (pw1.length < 6) throw new Error('Password must be at least 6 characters.');
+        if (pw1 !== pw2) throw new Error('Passwords do not match.');
+      }
       await updateAppSettings({ ...form, hours: form.hours.map(({ day, time }) => ({ day, time })) }, password);
+      if (pw1 || pw2) {
+        await changeAdminPassword(pw1, password);
+        setNewPw('');
+        setConfirmPw('');
+        if (onPasswordChanged) await onPasswordChanged(pw1);
+      }
       await refresh();
-      setSuccess('Saved — changes are now live everywhere in the app.');
+      setSuccess(pw1 ? 'Business details and dispatch password updated.' : 'Saved — changes are now live everywhere in the app.');
     } catch (e) {
       setError(e.message || 'Save failed');
     } finally {

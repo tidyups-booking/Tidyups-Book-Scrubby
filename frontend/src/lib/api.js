@@ -1,16 +1,19 @@
 import { Platform } from 'react-native';
 
-const RAW = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://bookmycleaning.xyz';
+const RAW = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.tidyupsbooking.com';
 export const BASE_URL = RAW.replace(/\/+$/, '');
 const API = `${BASE_URL}/api`;
 
-// The app's OWN backend (image management). On web it is same-origin;
-// on native builds it comes from EXPO_PUBLIC_IMAGES_URL.
+// Prefer the configured image API; same-origin remains the web fallback.
 function computeImagesBase() {
+  const configured = process.env.EXPO_PUBLIC_IMAGES_URL;
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location && window.location.origin) {
     return window.location.origin;
   }
-  return (process.env.EXPO_PUBLIC_IMAGES_URL || RAW).replace(/\/+$/, '');
+  return RAW.replace(/\/+$/, '');
 }
 export const IMAGES_BASE = computeImagesBase();
 const IMAGES_API = `${IMAGES_BASE}/api`;
