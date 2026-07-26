@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import asyncio
 import logging
+import mimetypes
 import requests
 import re
 from urllib.parse import quote_plus
@@ -34,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 # ---------------- Object Storage ----------------
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "emergent").strip().lower()
+LOCAL_STORAGE_ROOT = Path(os.environ.get("LOCAL_STORAGE_ROOT", ROOT_DIR / "storage"))
 APP_NAME = "tidyups-quote"
 MIME_TYPES = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp", "gif": "image/gif"}
 _storage_key = None
@@ -41,6 +44,11 @@ _storage_key = None
 
 def init_storage():
     global _storage_key
+    if STORAGE_BACKEND == "local":
+        LOCAL_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+        return str(LOCAL_STORAGE_ROOT)
+    if STORAGE_BACKEND != "emergent":
+        raise RuntimeError("STORAGE_BACKEND must be 'local' or 'emergent'")
     if _storage_key:
         return _storage_key
     resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ.get("EMERGENT_LLM_KEY")}, timeout=30)
@@ -49,7 +57,23 @@ def init_storage():
     return _storage_key
 
 
+def _local_storage_path(path: str) -> Path:
+    root = LOCAL_STORAGE_ROOT.resolve()
+    target = (root / path).resolve()
+    if not target.is_relative_to(root):
+        raise ValueError("Invalid storage path")
+    return target
+
+
 def put_object(path: str, data: bytes, content_type: str) -> dict:
+    if STORAGE_BACKEND == "local":
+        target = _local_storage_path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(f"{target.suffix}.tmp")
+        temporary.write_bytes(data)
+        temporary.replace(target)
+        return {"path": path}
+
     key = init_storage()
     resp = requests.put(
         f"{STORAGE_URL}/objects/{path}",
@@ -61,6 +85,12 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
 
 
 def get_object(path: str):
+    if STORAGE_BACKEND == "local":
+        target = _local_storage_path(path)
+        data = target.read_bytes()
+        content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        return data, content_type
+
     key = init_storage()
     resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
     resp.raise_for_status()
@@ -127,6 +157,9 @@ SEED_IMAGES = [
 
 async def seed_site_images():
     count = await db.site_images.count_documents({})
+    if STORAGE_BACKEND == "local" and count == 0:
+        logger.info("Local storage has no site images; add them from the admin dashboard")
+        return
     if count == 0:
         docs = []
         for s in SEED_IMAGES:
@@ -262,35 +295,6 @@ async def change_admin_password(payload: AdminPasswordUpdate, x_admin_password: 
     await db.app_settings.update_one({"key": "security"}, {"$set": {"admin_password": new_pw}}, upsert=True)
     ADMIN_PW_CACHE["value"] = new_pw
     return {"ok": True}
-
-
-PRODUCTION_API_URL = os.environ.get('PRODUCTION_API_URL', '').rstrip('/')
-PRODUCTION_ADMIN_PASSWORD = os.environ.get('PRODUCTION_ADMIN_PASSWORD', '')
-
-
-@api_router.get("/leads")
-async def proxy_leads(x_admin_password: Optional[str] = Header(default=None)):
-    _check_admin(x_admin_password)
-    if not PRODUCTION_API_URL:
-        raise HTTPException(status_code=500, detail="Leads source not configured")
-
-    def _fetch():
-        return requests.get(
-            f"{PRODUCTION_API_URL}/api/quotes",
-            headers={"X-Admin-Password": PRODUCTION_ADMIN_PASSWORD},
-            timeout=15,
-        )
-
-    try:
-        resp = await run_in_threadpool(_fetch)
-        if resp.status_code != 200:
-            raise HTTPException(status_code=502, detail="Leads server error")
-        return resp.json()
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Leads proxy failed: %s", e)
-        raise HTTPException(status_code=502, detail="Could not reach the leads server")
 
 
 # ---------------- Google Sheets Sync ----------------
@@ -499,6 +503,9 @@ def _clean_app_image(doc):
 
 async def seed_app_images():
     count = await db.app_images.count_documents({})
+    if STORAGE_BACKEND == "local" and count == 0:
+        logger.info("Local storage has no app images; add them from the admin dashboard")
+        return
     if count == 0:
         docs = []
         for s in SEED_APP_IMAGES:
@@ -1086,7 +1093,7 @@ app.add_middleware(
 async def on_startup():
     try:
         init_storage()
-        logger.info("Object storage initialized")
+        logger.info("%s storage initialized", STORAGE_BACKEND.capitalize())
     except Exception as e:
         logger.error("Storage init failed: %s", e)
     await seed_site_images()

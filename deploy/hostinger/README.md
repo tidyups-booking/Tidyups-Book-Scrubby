@@ -33,9 +33,27 @@ npm run build
    ```
 
 4. Fill in `.env` on the VPS. Do not commit it. The included MongoDB container
-   supplies `MONGO_URL` and `DB_NAME`; set a strong `ADMIN_PASSWORD`. Add the
-   optional integration values only when those features are enabled.
-5. Start the API and HTTPS reverse proxy:
+   supplies `MONGO_URL` and `DB_NAME`; set a strong `ADMIN_PASSWORD`. Keep
+   `STORAGE_BACKEND=local` so uploads stay on the VPS. Do not add the Emergent
+   database URL, API URL, or storage key to this environment. If MongoDB was
+   copied earlier, make sure `DB_NAME` exactly matches the database containing
+   that snapshot.
+5. If this server was copied from the `bookscrubby.com` deployment, copy its
+   current media into the Hostinger volume before switching over. The MongoDB
+   snapshot must already be present in `mongo_data`. Use the source hostname
+   that serves the Emergent `/api` routes:
+
+   ```bash
+   docker compose run --rm \
+     -e STORAGE_MIGRATION_SOURCE_URL=https://expo-book-cleaning.emergent.host \
+     api python migrate_storage.py
+   ```
+
+   The command preserves the current MongoDB records while replacing remote
+   media references with files in the `media_data` volume. Run it once. It
+   exits with an error and lists any files that could not be copied; resolve
+   those failures before continuing.
+6. Start the API and HTTPS reverse proxy:
 
    ```bash
    docker compose up -d --build
@@ -43,6 +61,11 @@ npm run build
 
 Caddy obtains and renews the TLS certificate automatically after DNS resolves.
 Confirm the deployment at `https://api.tidyupsbooking.com/api/`.
+
+From this point forward, `tidyupsbooking.com` reads and writes only the
+Hostinger MongoDB and media volume. `bookscrubby.com` keeps its own Emergent
+database and storage; leads, settings, assignments, and uploads do not sync
+between the two deployments.
 
 To deploy later backend changes:
 

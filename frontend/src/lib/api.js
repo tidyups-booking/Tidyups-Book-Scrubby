@@ -96,7 +96,7 @@ export async function adminLogin(password) {
 }
 
 export async function fetchQuotes(password) {
-  const res = await fetch(`${IMAGES_API}/leads`, {
+  const res = await fetch(`${API}/quotes`, {
     headers: { 'X-Admin-Password': password },
   });
   if (res.status === 401) {

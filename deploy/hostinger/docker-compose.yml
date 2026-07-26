@@ -24,6 +24,8 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    volumes:
+      - media_data:/data/storage
     expose:
       - "8000"
     healthcheck:
@@ -55,5 +57,6 @@ services:
 
 volumes:
   mongo_data:
+  media_data:
   caddy_data:
   caddy_config:
