@@ -1,0 +1,27 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "577Q74XH78.com.tidyups.cleaning"
+        ],
+        "components": [
+          {
+            "/": "/*",
+            "comment": "Open tidyupsbooking.com links in the Tidyups app"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "577Q74XH78.com.tidyups.cleaning"
+    ]
+  },
+  "activitycontinuation": {
+    "apps": [
+      "577Q74XH78.com.tidyups.cleaning"
+    ]
+  }
+}

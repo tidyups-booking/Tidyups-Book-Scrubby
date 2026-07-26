@@ -9,9 +9,14 @@
     "scheme": "tidyups",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0A0611",
+    "githubUrl": "https://tidyupsbooking.com",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tidyups.cleaning",
+      "associatedDomains": [
+        "applinks:tidyupsbooking.com",
+        "applinks:www.tidyupsbooking.com"
+      ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -55,6 +60,9 @@
       ]
     ],
     "extra": {
+      "privacyPolicyUrl": "https://tidyupsbooking.com/privacy",
+      "termsOfServiceUrl": "https://tidyupsbooking.com/terms",
+      "supportUrl": "https://tidyupsbooking.com/contact",
       "router": {},
       "eas": {
         "projectId": "5f85648d-6f7d-436c-a0b1-87c8ac217bd4"

@@ -7,8 +7,8 @@ export const CONTACT = {
   address: '6510 Gateway Boulevard Suite 1020',
   cityLine: 'Edmonton, AB T6H 5Z5',
   mapsUrl: 'https://maps.google.com/?q=6510+Gateway+Boulevard+Suite+1020,+Edmonton,+AB+T6H+5Z5',
-  website: 'tidyupscleaning.com',
-  websiteUrl: 'https://tidyupscleaning.com',
+  website: 'tidyupsbooking.com',
+  websiteUrl: 'https://tidyupsbooking.com',
   hours: [
     { day: 'Monday – Friday', time: '8:00 AM – 6:00 PM' },
     { day: 'Saturday', time: '9:00 AM – 4:00 PM' },
