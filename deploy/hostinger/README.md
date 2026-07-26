@@ -67,6 +67,14 @@ Hostinger MongoDB and media volume. `bookscrubby.com` keeps its own Emergent
 database and storage; leads, settings, assignments, and uploads do not sync
 between the two deployments.
 
+## Portainer
+
+Portainer is available at `https://manage.tidyupsbooking.com` for container
+status, logs, restarts, and Docker Compose administration. Its data is stored
+in the persistent `portainer_data` volume. Keep the administrator account
+protected with a unique password and do not expose Portainer's container ports
+directly; Caddy provides the public HTTPS endpoint.
+
 To deploy later backend changes:
 
 ```bash

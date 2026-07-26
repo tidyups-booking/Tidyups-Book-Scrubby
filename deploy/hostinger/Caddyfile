@@ -9,3 +9,8 @@ api.tidyupsbooking.com {
 	encode zstd gzip
 	reverse_proxy api:8000
 }
+
+manage.tidyupsbooking.com {
+	encode zstd gzip
+	reverse_proxy portainer:9000
+}
