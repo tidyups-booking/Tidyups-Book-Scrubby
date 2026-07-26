@@ -9,7 +9,6 @@
     "scheme": "tidyups",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0A0611",
-    "githubUrl": "https://tidyupsbooking.com",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tidyups.cleaning",
