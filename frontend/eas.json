@@ -16,6 +16,10 @@
     },
     "production": {
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://bookmycleaning.xyz",
+        "EXPO_PUBLIC_IMAGES_URL": "https://bookscrubby.com"
+      },
       "ios": {
         "resourceClass": "m-medium"
       },
@@ -27,7 +31,7 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "6792950350",
+        "ascAppId": "6794021819",
         "appleId": "REPLACE_WITH_APPLE_ID_EMAIL",
         "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID",
         "bundleIdentifier": "com.tidyups.cleaning",

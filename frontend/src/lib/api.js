@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
 
-const RAW = process.env.EXPO_PUBLIC_BACKEND_URL;
-if (!RAW) {
-  throw new Error('EXPO_PUBLIC_BACKEND_URL environment variable is required');
+const RAW = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://bookmycleaning.xyz';
+if (__DEV__ && !process.env.EXPO_PUBLIC_BACKEND_URL) {
+  console.warn('EXPO_PUBLIC_BACKEND_URL is not set — falling back to https://bookmycleaning.xyz');
 }
 export const BASE_URL = RAW.replace(/\/+$/, '');
 const API = `${BASE_URL}/api`;
