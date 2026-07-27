@@ -21,7 +21,7 @@
       }
     },
     "android": {
-      "package": "com.tidyups.cleaning",
+      "package": "com.tidyupsbooking",
       "adaptiveIcon": {
         "backgroundColor": "#0A0611",
         "foregroundImage": "./assets/images/icon.png"
