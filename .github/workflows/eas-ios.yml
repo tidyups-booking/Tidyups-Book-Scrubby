@@ -3,10 +3,9 @@ name: EAS iOS Build and Submit
 on:
   push:
     branches:
-      - main
+      - Main
     paths:
       - 'frontend/**'
-      - '.github/workflows/eas-ios.yml'
   workflow_dispatch:
 
 permissions:
