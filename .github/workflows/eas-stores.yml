@@ -1,6 +1,11 @@
 name: EAS App Store and Google Play Build and Submit
 
 on:
+  push:
+    branches:
+      - Main
+    paths:
+      - '.github/workflows/eas-stores.yml'
   workflow_dispatch:
 
 permissions:
