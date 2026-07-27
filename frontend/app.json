@@ -62,6 +62,7 @@
       "privacyPolicyUrl": "https://tidyupsbooking.com/privacy",
       "termsOfServiceUrl": "https://tidyupsbooking.com/terms",
       "supportUrl": "https://tidyupsbooking.com/contact",
+      "dataDeletionUrl": "https://tidyupsbooking.com/removedata",
       "router": {},
       "eas": {
         "projectId": "5f85648d-6f7d-436c-a0b1-87c8ac217bd4"
