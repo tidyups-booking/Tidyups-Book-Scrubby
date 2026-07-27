@@ -59,6 +59,58 @@ Original build spec: /app/MOBILE_APP_SPEC.md.
   Fix in place: package.json start script is `CI=1 expo start --web --port 3000` (watching disabled).
   **NO HOT RELOAD on frontend** — after any frontend code change run `sudo supervisorctl restart frontend` and wait ~25s.
 
+## Done (Feb 24, 2026 — code-quality refactor #3, iteration 17: 100% backend + 100% frontend)
+- Added `GRADIENT_START` / `GRADIENT_END_H` / `GRADIENT_END_D` constants to `constants/theme.js` and replaced every
+  inline `<LinearGradient start={{...}} end={{...}} />` object in `ui.js`, `(tabs)/index.js`, `(tabs)/services.js`.
+- New memoized image sub-components (source object stable per url — eliminates `<Image source={{uri: ...}}/>` in
+  render bodies): `PhotoThumb` (CleanerJobs.js), `useMemo(source)` in AdminImages.js `ImageRow`, `PromoImage`
+  ((tabs)/index.js), `GalleryImage` ((tabs)/gallery.js). AdminHistory.js `PhotoImage` was already memoized in
+  refactor #1.
+- Extracted module-level style constants: `TOP_EDGES`, `HEADER_STYLE`, `STACK_STYLE`, `CARD_TEXT_STYLE`,
+  `LIST_CONTENT_STYLE`, `SECTION_MT_32`, `CTA_OUTLINE_STYLE`, `H_SCROLL_CONTENT`, `DISABLED_STYLE` — removed inline
+  `{ flex:1 }`, `{ gap:12 }`, `{ marginTop:32 }`, `{ marginBottom:12 }`, `{ color:... }` style objects across
+  Home / Services / Gallery / Contact / Cleaner / AdminHistory.
+- **Skipped as false positives**: "missing hook deps" that flag refs/module-imports/local-vars/globals (oxlint
+  reports 0/0); Python `is None`/`is True/False` (PEP-8 idiom); console.warn already `if (__DEV__)`-gated.
+- Iteration 17 verdict: backend 100%, frontend 100%, no critical / minor / UI / integration / design issues,
+  retest_needed=false, should_main_agent_self_test=false. 103/103 pytest serial. oxlint 0 warnings 0 errors
+  across all 31 src files.
+
+## Done (Feb 24, 2026 — App Store submission prep)
+- **New static routes**: `/privacy` and `/terms` at bookscrubby.com now render actual policy pages (not the empty SPA shell). Apple's App Store crawler can now read them for the submission under review (App Store Connect ID `6792950350`, bundle `com.tidyups.cleaning`).
+- **LegalPage component**: reusable renderer with markdown-lite (**bold** and [text](url) supported), section headings, bullet lists, sticky back button, mailto/tel deep-links, and the standard "Back" nav (SafeAreaView + Expo Router `router.back() ?? replace('/')`).
+- **Privacy content** covers: who we are, what we collect (customer + cleaner), how we use it, who we share with (Twilio + Google Sheets + Emergent + MongoDB Atlas), location-only-when-tapping-Start disclosure, before/after photos, retention windows, PIPA/PIPEDA rights, children, security, changes.
+- **Terms content** covers: quote-vs-booking, payment/cancellation, access/safety, photo usage, satisfaction & re-clean guarantee, review SMS opt-out, liability cap, acceptable use, governing law (Alberta).
+- **Contact-tab footer**: added Privacy / Terms links + copyright line so the App Store reviewer can find them from the Home tab in 2 taps.
+- **app.json store metadata**:
+  - `ios.bundleIdentifier` = `com.tidyups.cleaning`, `buildNumber` = "1"
+  - `ios.associatedDomains` = `applinks:bookscrubby.com`
+  - `ios.config.usesNonExemptEncryption` = false + `ITSAppUsesNonExemptEncryption` = false (satisfies the "encryption" review question)
+  - `ios.infoPlist` usage strings: `NSLocationWhenInUseUsageDescription`, `NSLocationAlwaysAndWhenInUseUsageDescription`, `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSPhotoLibraryAddUsageDescription` — all written in plain language explaining why each permission is requested.
+  - `android.package` = `com.tidyups.cleaning`, `versionCode` = 1, `permissions` list (location + camera + media), `intentFilters` for App Links to `bookscrubby.com`.
+  - `expo-image-picker` plugin block with `cameraPermission` + `photosPermission` text.
+  - `extra`: `privacyPolicyUrl`, `termsOfServiceUrl`, `supportUrl` (pointers used by EAS submit templates).
+- **eas.json store submit scaffolding**:
+  - `submit.production.ios`: `ascAppId` set to **6792950350** (the App Store Connect ID user provided), plus placeholders `REPLACE_WITH_APPLE_ID_EMAIL` and `REPLACE_WITH_APPLE_TEAM_ID` for user to fill before `eas submit`.
+  - `submit.production.android`: `serviceAccountKeyPath` pointing to `./google-play-service-account.json` (user drops that in when ready), `track: production`, `releaseStatus: completed`.
+  - `build.production.android.buildType` = `app-bundle` (required by Google Play).
+  - `build.production.ios.resourceClass` = `m-medium`.
+- Verified: preview /privacy + /terms both return 200, oxlint 0/0, screenshot confirms the full Privacy Policy renders with headings and bullet lists.
+
+## Done (Feb 24, 2026 — code-quality refactor #2 vs Code Quality Report Env e28e105d-bedd-45c6-bad8-782f1d891e1a)
+- Verified serial `pytest -n 0` runs 103/103 clean; oxlint reports 0 warnings / 0 errors across all 28 src files.
+- **False-positive fixes SKIPPED (correct behaviour)**: The static analyzer flagged `watchRef`/`AsyncStorage`/`HTTP_UNAUTHORIZED`/`ADMIN_PW_KEY`/`L`/`Platform`/local-vars as missing hook deps — none of these are valid deps. It also flagged `is None`/`is True/False` as identity-comparison anti-patterns — every flagged occurrence is the PEP-8 idiom. Console.warn statements already gated behind `if (__DEV__)`.
+- **Real refactors applied**:
+  - `_layout.js`: `STACK_SCREEN_OPTIONS`, `MODAL_OPTIONS`, `FONT_MAP`, `ROOT_STYLE` hoisted to module scope.
+  - `(tabs)/index.js`: `TOP_EDGES` + `H_SCROLL_CONTENT` constants (edges + horizontal carousel).
+  - `(tabs)/quote.js`: `TOP_EDGES` + `KAV_BEHAVIOR` constants + `styles.kavFill`.
+  - `components/AdminImages.js`: split into `UploadCard` + `ImageRow` + `RowActions` subcomponents; `LIST_CONTENT_STYLE` constant; inline `{flex:1}` + `{paddingTop:60}` moved to StyleSheet (`rowText`/`emptyPad`).
+  - `components/AdminTeam.js`: extracted `CleanerRow` + `PinCard`; `LIST_CONTENT_STYLE` + `MAP_PIN_ROW_STYLE` constants.
+- Iteration 16 outcome (bug_testing_agent runtime verification): backend 100%, frontend 90%, 103/103 pytest,
+  all 4 backend smoke curls pass, all admin/cleaner/business/history/team/home flows verified with runtime screenshots
+  under /app/test_reports/screenshots/iteration_16. Only "issue" flagged was LOW-priority selector-name
+  mismatch (`quote-submit` vs `quote-submit-btn` requested in the test spec) — not a regression; button works.
+
 ## Done (Feb 23, 2026 session — Job History + Photo Proof + Review Requests, iteration 12: 103/103 backend + frontend 100%)
 - **Job History (admin)** — new "History" tab (5th admin segment): browsable list of DONE assignments,
   filterable by cleaner (chip row). Each card shows customer, service, address, phone, completed timestamp,
