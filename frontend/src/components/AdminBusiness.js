@@ -95,8 +95,7 @@ function ReviewRequestsCard({ form, set }) {
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Review Requests</Text>
       <Text style={styles.reviewHint}>
-        When a cleaner marks a job as done, we'll text this link to the customer so they can leave a Google review. Grab
-        your business's Google review URL from your Business Profile.
+        {"When a cleaner marks a job as done, we'll text this link to the customer so they can leave a Google review. Grab your business's Google review URL from your Business Profile."}
       </Text>
       <Field
         label="Google review link"
@@ -115,7 +114,8 @@ function PhotoRequirementCard({ form, set }) {
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Photo Requirements</Text>
       <Text style={styles.reviewHint}>
-        When ON, cleaners can't mark a job Done until they've uploaded at least one <Text style={styles.emphasis}>before</Text>
+        {"When ON, cleaners can't mark a job Done until they've uploaded at least one "}
+        <Text style={styles.emphasis}>before</Text>
         {' '}and one <Text style={styles.emphasis}>after</Text> photo. Great for insurance protection and consistent proof-of-work.
       </Text>
       <TouchableOpacity
@@ -179,8 +179,9 @@ function DigestCard({ password }) {
     <View style={styles.card} testID="admin-biz-digest-card">
       <Text style={styles.cardTitle}>Owner Nightly Digest</Text>
       <Text style={styles.reviewHint}>
-        Auto-sent as an SMS at 9pm local time to your owner phone (env <Text style={styles.emphasis}>DIGEST_TO_NUMBER</Text>) with today's leads,
-        jobs done, and any missed reviews. Preview it here anytime, or fire one now for testing.
+        {"Auto-sent as an SMS at 9pm local time to your owner phone (env "}
+        <Text style={styles.emphasis}>DIGEST_TO_NUMBER</Text>
+        {') with today\'s leads, jobs done, and any missed reviews. Preview it here anytime, or fire one now for testing.'}
       </Text>
       <View style={styles.digestButtonRow}>
         <TouchableOpacity

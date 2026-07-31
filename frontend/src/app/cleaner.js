@@ -123,6 +123,7 @@ export default function CleanerScreen() {
 
   useEffect(() => {
     if (!profile) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadJobs(profile);
     const timer = setInterval(() => loadJobs(profile), JOBS_POLL_INTERVAL_MS);
     return () => clearInterval(timer);

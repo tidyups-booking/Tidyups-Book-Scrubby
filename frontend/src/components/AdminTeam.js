@@ -85,8 +85,7 @@ function PinCard({ pin, setPin, savingPin, onSavePin, isDefault, error, notice }
     <View style={styles.pinCard}>
       <Text style={styles.pinTitle}>Cleaner PIN</Text>
       <Text style={styles.pinHint}>
-        Cleaners check in from the Contact tab → "Cleaner Check-In" with this PIN, then share live location while
-        driving to a job.
+        {'Cleaners check in from the Contact tab \u2192 \u201cCleaner Check-In\u201d with this PIN, then share live location while driving to a job.'}
       </Text>
       {isDefault ? (
         <View style={styles.pinWarn} testID="admin-pin-default-warn">
@@ -150,6 +149,7 @@ export default function AdminTeam({ password }) {
   }, [password]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     fetchStaffPin(password)
       .then((d) => {

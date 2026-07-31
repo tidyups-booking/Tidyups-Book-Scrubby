@@ -129,6 +129,7 @@ function ClientNotesEditor({ customerName, phone, password }) {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetchClientNotes(customerName, phone, password)
       .then((r) => {
@@ -208,7 +209,7 @@ function MergePickerModal({ visible, sourceGroup, allGroups, onCancel, onPick })
           <Ionicons name="close" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.viewerTitle}>
-          Merge "{sourceGroup?.customer_name}" into…
+          {`Merge "${sourceGroup?.customer_name}" into\u2026`}
         </Text>
         <Text style={styles.mergeHint}>
           All {sourceGroup?.visits?.length || 0} visits + notes will move to the client you pick.
