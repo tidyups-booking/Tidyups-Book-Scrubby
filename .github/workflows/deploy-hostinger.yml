@@ -1,0 +1,121 @@
+name: Deploy to Hostinger VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+      confirm:
+        description: 'Type "deploy" to confirm'
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'deploy'
+    environment: production
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: emergent-updates
+      
+      - name: Verify deployment readiness
+        run: |
+          echo "🔍 Verifying deployment prerequisites..."
+          
+          # Check frontend build exists
+          if [ ! -f "frontend/build/index.html" ]; then
+            echo "❌ Frontend build not found"
+            exit 1
+          fi
+          
+          # Check deployment files exist
+          if [ ! -f "deploy/hostinger/docker-compose.yml" ]; then
+            echo "❌ docker-compose.yml not found"
+            exit 1
+          fi
+          
+          if [ ! -f "deploy/hostinger/Caddyfile" ]; then
+            echo "❌ Caddyfile not found"
+            exit 1
+          fi
+          
+          echo "✅ All deployment files verified"
+      
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            echo "🚀 Starting deployment..."
+            
+            # Navigate to repository
+            cd ~/Tidyups-Book-Scrubby || {
+              echo "Repository not found, cloning..."
+              git clone https://github.com/tidyups-booking/Tidyups-Book-Scrubby.git
+              cd Tidyups-Book-Scrubby
+            }
+            
+            # Pull latest changes
+            echo "📦 Pulling latest changes..."
+            git fetch origin
+            git checkout emergent-updates
+            git pull origin emergent-updates
+            
+            # Deploy
+            cd deploy/hostinger
+            
+            # Verify .env exists
+            if [ ! -f .env ]; then
+              echo "❌ .env file not found on VPS"
+              echo "Please create .env file from .env.example and set ADMIN_PASSWORD"
+              exit 1
+            fi
+            
+            # Run deployment
+            ./deploy.sh --rebuild
+            
+            echo "✅ Deployment complete!"
+      
+      - name: Post-deployment verification
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            cd ~/Tidyups-Book-Scrubby/deploy/hostinger
+            
+            echo "📊 Service Status:"
+            docker compose ps
+            
+            echo ""
+            echo "🔍 Recent API logs:"
+            docker compose logs --tail=50 api
+      
+      - name: Deployment summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** emergent-updates" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 Deployment URLs" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: https://tidyupsbooking.com" >> $GITHUB_STEP_SUMMARY
+          echo "- API: https://api.tidyupsbooking.com/api/" >> $GITHUB_STEP_SUMMARY
+          echo "- Portainer: https://manage.tidyupsbooking.com" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Deployment completed successfully!" >> $GITHUB_STEP_SUMMARY
