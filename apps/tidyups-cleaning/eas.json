@@ -1,0 +1,44 @@
+{
+  "cli": {
+    "version": ">= 13.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "distribution": "store"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "support@bookscrubby.com",
+        "ascAppId": "6792950350",
+        "ascApiKeyId": "8KRQVKD5VB",
+        "ascApiKeyIssuerId": "207e2f58-9fab-4c4a-a87c-d292a1c2aaaa",
+        "ascApiKeyPath": "./AuthKey_8KRQVKD5VB.p8",
+        "appleTeamId": "577Q74XH78"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "production",
+        "releaseStatus": "completed"
+      }
+    }
+  }
+}

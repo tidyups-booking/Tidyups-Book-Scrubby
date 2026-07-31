@@ -1,0 +1,111 @@
+{
+  "expo": {
+    "name": "Tidyups Cleaning",
+    "slug": "tidyups-cleaning",
+    "owner": "book-scrubby",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "tidyups",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0A0611",
+    "primaryColor": "#8B2FC9",
+    "privacy": "public",
+    "githubUrl": "https://bookscrubby.com",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tidyups.cleaning",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "associatedDomains": [
+        "applinks:bookscrubby.com"
+      ],
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Tidyups shares your live position with dispatch only while you tap 'Start Sharing Location' as a cleaner heading to a job. Sharing stops the moment you tap Stop.",
+        "NSCameraUsageDescription": "Tidyups uses the camera so cleaners can snap before-and-after photos of the job site to share results with the customer.",
+        "NSPhotoLibraryUsageDescription": "Tidyups accesses your photo library so you can attach an existing before/after photo to a job or upload a business logo/promo image.",
+        "NSPhotoLibraryAddUsageDescription": "Tidyups saves job photos back to your library only if you tap Save.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.tidyups.cleaning",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0611",
+        "foregroundImage": "./assets/images/icon.png"
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "bookscrubby.com"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "extra": {
+      "privacyPolicyUrl": "https://bookscrubby.com/privacy",
+      "termsOfServiceUrl": "https://bookscrubby.com/terms",
+      "supportUrl": "https://bookscrubby.com/contact",
+      "router": {},
+      "eas": {
+        "projectId": "97c4d8ba-f6c2-48f8-8bcc-a2021d662d76"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0A0611",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 160
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Tidyups uses your location to share your live position with dispatch while you head to a job site."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Tidyups accesses photos so you can attach before/after job proof or upload a business logo.",
+          "cameraPermission": "Tidyups uses the camera so cleaners can snap before/after photos of the job site."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#8B2FC9"
+        }
+      ]
+    ]
+  }
+}
