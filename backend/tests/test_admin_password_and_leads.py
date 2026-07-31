@@ -1,6 +1,6 @@
-"""Backend tests for the new endpoints added in iteration 10:
+"""Backend tests for admin authentication and assignment status:
 
-- GET  /api/leads               (admin-gated proxy of production quotes)
+- GET  /api/quotes              (admin-gated local quotes)
 - PUT  /api/admin/password      (change password, min 6 chars, DB-persist)
 - POST /api/admin/login         (updated pw takes effect)
 - POST /api/assignments/{id}/status (new status transitions: on_the_way / cleaning / done)
@@ -17,7 +17,7 @@ import requests
 
 
 BASE_URL = os.environ.get(
-    "EXPO_PUBLIC_IMAGES_URL",
+    "EXPO_PUBLIC_BACKEND_URL",
     "https://expo-book-cleaning.preview.emergentagent.com",
 ).rstrip("/")
 
@@ -84,24 +84,23 @@ def _mk_payload(cleaner_id):
     }
 
 
-# --------------------------- GET /api/leads ---------------------------
+# --------------------------- GET /api/quotes ---------------------------
 
-class TestLeadsProxy:
+class TestLocalQuotes:
     def test_requires_admin(self, api):
-        r = api.get(f"{BASE_URL}/api/leads")
+        r = api.get(f"{BASE_URL}/api/quotes")
         assert r.status_code == 401
 
     def test_wrong_pw_401(self, api):
-        r = api.get(f"{BASE_URL}/api/leads",
+        r = api.get(f"{BASE_URL}/api/quotes",
                     headers={"X-Admin-Password": "wrong"})
         assert r.status_code == 401
 
     def test_returns_list_of_leads(self, api, admin_headers):
-        r = api.get(f"{BASE_URL}/api/leads", headers=admin_headers)
+        r = api.get(f"{BASE_URL}/api/quotes", headers=admin_headers)
         assert r.status_code == 200, r.text
         data = r.json()
         assert isinstance(data, list)
-        # Production has real leads — at least verify shape when non-empty
         if data:
             lead = data[0]
             assert "id" in lead
@@ -148,13 +147,13 @@ class TestAdminPasswordChange:
                              headers={"X-Admin-Password": new_pw})
         assert new_login.status_code == 200
 
-        # New pw also works on /leads (integration check)
-        leads = api.get(f"{BASE_URL}/api/leads",
+        # New pw also works on the local quotes endpoint.
+        leads = api.get(f"{BASE_URL}/api/quotes",
                        headers={"X-Admin-Password": new_pw})
         assert leads.status_code == 200
 
-        # Old pw denied on /leads
-        leads_old = api.get(f"{BASE_URL}/api/leads",
+        # Old pw is denied on the local quotes endpoint.
+        leads_old = api.get(f"{BASE_URL}/api/quotes",
                            headers={"X-Admin-Password": ORIGINAL_PW})
         assert leads_old.status_code == 401
         # (autouse fixture restores password)
@@ -266,6 +265,8 @@ class TestAssignmentStatus:
                                  headers={"X-Admin-Password": ORIGINAL_PW}).json()
             row = next(x for x in admin_list if x["id"] == a["id"])
             assert row["status"] == "done"
+            assert row["completed_at"] is not None
+            assert row["status_updated_at"] is not None
         finally:
             requests.delete(f"{BASE_URL}/api/assignments/{a['id']}",
                             headers={"X-Admin-Password": ORIGINAL_PW})

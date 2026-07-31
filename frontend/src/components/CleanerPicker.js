@@ -59,15 +59,18 @@ export default function CleanerPicker({ visible, password, leadName, onClose, on
 
   useEffect(() => {
     if (!visible) return;
-    setLoading(true);
-    setError('');
-    fetchCleaners(password)
-      .then((data) => setCleaners(Array.isArray(data) ? data : []))
-      .catch((e) => {
-        setCleaners([]);
-        setError(e.message === 'unauthorized' ? 'Session expired — please sign in again.' : 'Could not load cleaners — check your connection.');
-      })
-      .finally(() => setLoading(false));
+    const timer = setTimeout(() => {
+      setLoading(true);
+      setError('');
+      fetchCleaners(password)
+        .then((data) => setCleaners(Array.isArray(data) ? data : []))
+        .catch((e) => {
+          setCleaners([]);
+          setError(e.message === 'unauthorized' ? 'Session expired — please sign in again.' : 'Could not load cleaners — check your connection.');
+        })
+        .finally(() => setLoading(false));
+    }, 0);
+    return () => clearTimeout(timer);
   }, [visible, password]);
 
   return (

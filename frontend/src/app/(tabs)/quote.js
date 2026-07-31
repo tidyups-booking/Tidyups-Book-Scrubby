@@ -75,8 +75,11 @@ export default function QuoteScreen() {
 
   useEffect(() => {
     if (service && SERVICE_OPTIONS.includes(service)) {
-      setForm((f) => ({ ...f, service_type: service }));
-      setSuccess(false);
+      const timer = setTimeout(() => {
+        setForm((f) => ({ ...f, service_type: service }));
+        setSuccess(false);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [service]);
 
@@ -170,7 +173,7 @@ export default function QuoteScreen() {
       <KeyboardAvoidingView style={styles.kavFill} behavior={KAV_BEHAVIOR}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <SectionHeader kicker="Free · No obligation" title="Request a Quote" style={{ marginTop: 14 }} />
-          <Text style={styles.intro}>Tell us about your space and we'll get right back to you with a price.</Text>
+          <Text style={styles.intro}>{"Tell us about your space and we'll get right back to you with a price."}</Text>
 
           {prefilled ? (
             <View style={styles.prefillBanner} testID="book-again-banner">

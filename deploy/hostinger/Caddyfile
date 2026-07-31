@@ -1,0 +1,18 @@
+tidyupsbooking.com, www.tidyupsbooking.com {
+	root * /srv/tidyups-web
+	encode zstd gzip
+	@appleAssociation path /apple-app-site-association /.well-known/apple-app-site-association
+	header @appleAssociation Content-Type application/json
+	try_files {path} {path}.html {path}/index.html /+not-found.html
+	file_server
+}
+
+api.tidyupsbooking.com {
+	encode zstd gzip
+	reverse_proxy api:8000
+}
+
+manage.tidyupsbooking.com {
+	encode zstd gzip
+	reverse_proxy portainer:9000
+}

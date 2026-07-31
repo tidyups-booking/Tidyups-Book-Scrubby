@@ -30,10 +30,7 @@ const LIST_CONTENT_STYLE = { paddingHorizontal: 20, paddingBottom: 40, gap: 12 }
 
 // Wraps <Image> so we don't recreate a {uri} object on every parent render.
 const PhotoImage = React.memo(function PhotoImage({ url, style, resizeMode }) {
-  const [source, setSource] = useState({ uri: resolveImageUrl(url) });
-  useEffect(() => {
-    setSource({ uri: resolveImageUrl(url) });
-  }, [url]);
+  const source = React.useMemo(() => ({ uri: resolveImageUrl(url) }), [url]);
   return <Image source={source} style={style} resizeMode={resizeMode} />;
 });
 
@@ -521,7 +518,10 @@ export default function AdminHistory({ password }) {
   }, [password]);
 
   useEffect(() => {
-    load(selectedCleaner);
+    const timer = setTimeout(() => {
+      load(selectedCleaner);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [load, selectedCleaner]);
 
   const onSendReview = async (assignment) => {

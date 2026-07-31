@@ -35,7 +35,10 @@ export function BusinessProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    refresh();
+    const timer = setTimeout(() => {
+      refresh();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [refresh]);
 
   const value = useMemo(() => ({ business, logoUrl, refresh }), [business, logoUrl, refresh]);

@@ -40,11 +40,16 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*-output.log
 dump.rdb
 
 # System files
 .DS_Store
 *.pem
+*.p8
+*.cer
+*.ipa
+*.mobileprovision
 
 # Python
 __pycache__/
@@ -90,7 +95,8 @@ frontend/node_modules/.cache/default-development/6.pack
 frontend/node_modules/.cache/default-development/10.pack
 frontend/node_modules/.cache/default-development/9.pack
 frontend/node_modules/.cache/default-development/8.pack
-frontend/node_modules/.cache/default-development/11.pack
 .env
 .env.*
 *.env
+!**/.env.example
+frontend/node_modules/.cache/default-development/11.pack

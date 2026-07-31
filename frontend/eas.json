@@ -16,29 +16,28 @@
     },
     "production": {
       "autoIncrement": true,
-      "ios": {
-        "resourceClass": "m-medium"
-      },
       "android": {
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "distribution": "store"
       }
     }
   },
   "submit": {
     "production": {
       "ios": {
+        "appleId": "support@bookscrubby.com",
         "ascAppId": "6792950350",
-        "appleId": "REPLACE_WITH_APPLE_ID_EMAIL",
-        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID",
-        "bundleIdentifier": "com.tidyups.cleaning",
-        "companyName": "Tidyups Cleaning Inc.",
-        "language": "en-US"
+        "ascApiKeyId": "H7Y726A65W",
+        "ascApiKeyIssuerId": "207e2f58-9fab-4c4a-a87c-d292a1c2aaaa",
+        "ascApiKeyPath": "./AuthKey_H7Y726A65W.p8",
+        "appleTeamId": "577Q74XH78"
       },
       "android": {
         "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "production",
-        "releaseStatus": "completed",
-        "changesNotSentForReview": false
+        "releaseStatus": "completed"
       }
     }
   }

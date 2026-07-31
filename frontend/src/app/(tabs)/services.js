@@ -46,7 +46,7 @@ export default function ServicesScreen() {
         </View>
 
         <Text style={styles.footNote}>
-          Something else in mind? Choose "Other / Not Sure" on the quote form and tell us what you need.
+          {'Something else in mind? Choose "Other / Not Sure" on the quote form and tell us what you need.'}
         </Text>
       </ScrollView>
     </SafeAreaView>
