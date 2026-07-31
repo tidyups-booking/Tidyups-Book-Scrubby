@@ -227,3 +227,52 @@ Original build spec: /app/MOBILE_APP_SPEC.md.
     min 6 chars). Business tab "Dispatch Password" card (admin-pw-new/confirm/save); on success updates
     AsyncStorage + parent storedPw via onPasswordChanged. NOTE: cache is process-local — fine single-worker;
     multi-worker would need per-request DB read.
+
+
+- **Iteration 18 (Feb 2026, 103/103 backend + frontend 100%)** — TestFlight crash fix + 10 code-review fixes verified:
+  - **TestFlight startup crash fix**: `/app/frontend/src/lib/api.js` line 9 now falls back to hardcoded backend URL
+    when `EXPO_PUBLIC_BACKEND_URL` is missing at EAS build time (no top-level throw that would crash native app
+    before React mounts).
+  - **Atomic assignment claim**: `server.py:1006` uses `db.assignments.find_one_and_update` — single-writer wins,
+    prevents double-assignment races.
+  - **HMAC-signed proof photos**: `_apply_proof_signature/_proof_sig_ok` (server.py:48-82) use `hmac.compare_digest`
+    with 1h TTL; `serve_app_image` (649-683) enforces sig OR admin header OR cleaner+pin on `/proof/` paths.
+  - **Background Twilio task GC fix**: `_spawn_bg` (server.py:33-45) retains strong refs in `_BG_TASKS` set with
+    done-callback for exception logging — no "coroutine was never awaited" warnings.
+  - **Idempotent review-request**: `review_sent_at` only set after successful Twilio send (line 1173 sync path,
+    line 1149 background path); endpoint returns 502 when Twilio env vars missing.
+  - **iOS location metadata**: Removed "Always" location permission from app.json (only when-in-use).
+  - Backend regression: `pytest -n 0` 103/103 in 90.72s. Frontend regression: home, /privacy, /terms, /quote,
+    /cleaner check-in (PIN 1234), /admin login (tidyups2026) all 5 tabs — all pass.
+  - Report: `/app/test_reports/iteration_18.json`.
+
+- **Feb 2026 session (108/108 backend + smoke frontend)** — additional owner-facing tools:
+  - **Twilio production creds** set in `/app/backend/.env` (SID/token/from +18255334317). Verified queued send to +17807185092.
+  - **Rapid photo capture (cleaner)**: on native, `launchCameraAsync` loops after each successful upload
+    — up to 50-photo burst until cleaner cancels. On web, gallery multi-select with `selectionLimit: 50`.
+    Photo count shown in label; "Snap another" / "Add more" button.
+  - **Client Notes**: new `client_notes` Mongo collection keyed by `_client_key(name, phone)` (lowercased trimmed name + digits-only phone). Endpoints:
+    `GET /api/clients/notes?customer_name=…&phone=…`, `PUT /api/clients/notes`. Assignments now include
+    `client_notes` field (batch-loaded via `_clean_assignments_with_notes` on list endpoints). Admin edits
+    inline in "By Client" History view; cleaners see gold notes box on every matching job card.
+  - **History By-Client view**: new "Recent / By Client" toggle in AdminHistory. Groups done assignments by
+    `_client_key`, shows expandable client card (visits list + notes editor).
+  - **Photo-Required-To-Done**: `require_photos_for_done` flag in app_settings (DEFAULT_BUSINESS default False).
+    Business tab toggle. Server enforces on POST /api/assignments/{id}/status (status=done) — returns 400
+    with helpful message when photos missing. Cleaner Done button gets lock icon + gold hint. Setting polled
+    every 60s by cleaner screen. 5 new pytest cases.
+  - **Duplicate-Client Merge**: `POST /api/clients/merge` (from_name+from_phone → into_name+into_phone).
+    Rewrites assignments' customer_name/phone, concatenates notes into target ([merged from …] tag), deletes
+    source note doc. UI: "Merge into another client…" button on each ClientGroupCard opens a MergePickerModal
+    listing other groups from current list; select target → confirm → refresh.
+  - **Owner Nightly Digest**: env vars `DIGEST_TO_NUMBER`, `DIGEST_HOUR` (default 21), `DIGEST_TZ_OFFSET_HOURS`
+    (default -7 = Mountain). Background scheduler task (`_digest_scheduler_loop`) spawned via `_schedule_bg`
+    at startup; runs hourly, fires once at target hour, idempotent via `last_sent_local_date` in `digest_meta`.
+    Body includes today's leads count + top lead, jobs done, missed reviews. Endpoints
+    `GET /api/admin/digest/preview` + `POST /api/admin/digest/send-now`. UI: DigestCard in Business tab with
+    "Preview digest" and gold "Send now" buttons + preview body.
+  - **Home Staff Login button**: prominent violet CTA in hero section (below Call) — `home-staff-login` testID
+    navigates to /admin. Complements existing top-bar Dispatch pill.
+  - **Twilio review-request test** rewritten to be Twilio-config-agnostic (`test_send_review_respects_twilio_configuration`).
+  - Test credentials note: DB admin password is now `tidyups` (user changed from baseline `tidyups2026`).
+

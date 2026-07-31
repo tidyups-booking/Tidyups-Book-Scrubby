@@ -4,11 +4,11 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import UpdateOne
+from pymongo import UpdateOne, ReturnDocument
 import os
 import asyncio
+import time
 import logging
-import mimetypes
 import requests
 import re
 from urllib.parse import quote_plus
@@ -19,10 +19,67 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from twilio.rest import Client as TwilioClient
 import google_sheets as gs
+import secrets as _secrets
+import hmac as _hmac
+import hashlib as _hashlib
 
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# --- Background task retention (Fix: dropped-task GC) ---
+_BG_TASKS: "set[asyncio.Task]" = set()
+
+
+def _schedule_bg(coro, name: str = "bg"):
+    """Fire-and-forget an awaitable but keep a strong ref so the loop can't GC it,
+    and log any exception it raises."""
+    task = asyncio.create_task(coro, name=name)
+    _BG_TASKS.add(task)
+    def _done(t):
+        _BG_TASKS.discard(t)
+        exc = t.exception()
+        if exc:
+            logger.error("Background task %s failed: %s", t.get_name(), exc)
+    task.add_done_callback(_done)
+    return task
+
+
+# --- Signed URLs for job-proof photos (privacy: browsers can't add auth headers to <img>) ---
+_PROOF_URL_SECRET = os.environ.get("PROOF_URL_SECRET") or _secrets.token_urlsafe(48)
+_PROOF_URL_TTL_SECONDS = 60 * 60  # 1h — long enough for admin/cleaner to browse, short enough that leaked URLs expire
+
+
+def _sign_proof(path: str, expires_at: int) -> str:
+    msg = f"{path}|{expires_at}".encode()
+    return _hmac.new(_PROOF_URL_SECRET.encode(), msg, _hashlib.sha256).hexdigest()[:32]
+
+
+def _apply_proof_signature(url: str) -> str:
+    """If `url` points at a job-proof photo, append `?sig=…&exp=…`."""
+    if not url or "/proof/" not in url:
+        return url
+    # url looks like /api/app-images/file/{path}
+    prefix = "/api/app-images/file/"
+    if not url.startswith(prefix):
+        return url
+    path = url[len(prefix):]
+    exp = int(time.time()) + _PROOF_URL_TTL_SECONDS
+    sig = _sign_proof(path, exp)
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}sig={sig}&exp={exp}"
+
+
+def _proof_sig_ok(path: str, sig: Optional[str], exp: Optional[str]) -> bool:
+    if not sig or not exp:
+        return False
+    try:
+        exp_int = int(exp)
+    except (TypeError, ValueError):
+        return False
+    if exp_int < int(time.time()):
+        return False
+    return _hmac.compare_digest(sig, _sign_proof(path, exp_int))
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -36,8 +93,6 @@ logger = logging.getLogger(__name__)
 
 # ---------------- Object Storage ----------------
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
-STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "emergent").strip().lower()
-LOCAL_STORAGE_ROOT = Path(os.environ.get("LOCAL_STORAGE_ROOT", ROOT_DIR / "storage"))
 APP_NAME = "tidyups-quote"
 MIME_TYPES = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp", "gif": "image/gif"}
 _storage_key = None
@@ -45,11 +100,6 @@ _storage_key = None
 
 def init_storage():
     global _storage_key
-    if STORAGE_BACKEND == "local":
-        LOCAL_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
-        return str(LOCAL_STORAGE_ROOT)
-    if STORAGE_BACKEND != "emergent":
-        raise RuntimeError("STORAGE_BACKEND must be 'local' or 'emergent'")
     if _storage_key:
         return _storage_key
     resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ.get("EMERGENT_LLM_KEY")}, timeout=30)
@@ -58,23 +108,7 @@ def init_storage():
     return _storage_key
 
 
-def _local_storage_path(path: str) -> Path:
-    root = LOCAL_STORAGE_ROOT.resolve()
-    target = (root / path).resolve()
-    if not target.is_relative_to(root):
-        raise ValueError("Invalid storage path")
-    return target
-
-
 def put_object(path: str, data: bytes, content_type: str) -> dict:
-    if STORAGE_BACKEND == "local":
-        target = _local_storage_path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        temporary = target.with_suffix(f"{target.suffix}.tmp")
-        temporary.write_bytes(data)
-        temporary.replace(target)
-        return {"path": path}
-
     key = init_storage()
     resp = requests.put(
         f"{STORAGE_URL}/objects/{path}",
@@ -86,12 +120,6 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
 
 
 def get_object(path: str):
-    if STORAGE_BACKEND == "local":
-        target = _local_storage_path(path)
-        data = target.read_bytes()
-        content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-        return data, content_type
-
     key = init_storage()
     resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
     resp.raise_for_status()
@@ -158,9 +186,6 @@ SEED_IMAGES = [
 
 async def seed_site_images():
     count = await db.site_images.count_documents({})
-    if STORAGE_BACKEND == "local" and count == 0:
-        logger.info("Local storage has no site images; add them from the admin dashboard")
-        return
     if count == 0:
         docs = []
         for s in SEED_IMAGES:
@@ -251,7 +276,7 @@ async def create_quote(payload: QuoteCreate):
         _send_lead_sms(quote)
     except Exception as e:
         logger.error("SMS alert error: %s", e)
-    asyncio.create_task(_sync_quote_to_sheet(quote))
+    _schedule_bg(_sync_quote_to_sheet(quote), name="sync-sheet")
     return quote
 
 
@@ -266,7 +291,7 @@ async def _load_admin_password():
 
 def _check_admin(password: Optional[str]):
     expected = ADMIN_PW_CACHE["value"]
-    if not expected or password != expected:
+    if not expected or not password or not _secrets.compare_digest(str(password), str(expected)):
         raise HTTPException(status_code=401, detail="Invalid admin password")
 
 
@@ -296,6 +321,35 @@ async def change_admin_password(payload: AdminPasswordUpdate, x_admin_password: 
     await db.app_settings.update_one({"key": "security"}, {"$set": {"admin_password": new_pw}}, upsert=True)
     ADMIN_PW_CACHE["value"] = new_pw
     return {"ok": True}
+
+
+PRODUCTION_API_URL = os.environ.get('PRODUCTION_API_URL', '').rstrip('/')
+PRODUCTION_ADMIN_PASSWORD = os.environ.get('PRODUCTION_ADMIN_PASSWORD', '')
+
+
+@api_router.get("/leads")
+async def proxy_leads(x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    if not PRODUCTION_API_URL:
+        raise HTTPException(status_code=500, detail="Leads source not configured")
+
+    def _fetch():
+        return requests.get(
+            f"{PRODUCTION_API_URL}/api/quotes",
+            headers={"X-Admin-Password": PRODUCTION_ADMIN_PASSWORD},
+            timeout=15,
+        )
+
+    try:
+        resp = await run_in_threadpool(_fetch)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail="Leads server error")
+        return resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Leads proxy failed: %s", e)
+        raise HTTPException(status_code=502, detail="Could not reach the leads server")
 
 
 # ---------------- Google Sheets Sync ----------------
@@ -508,9 +562,6 @@ def _clean_app_image(doc):
 
 async def seed_app_images():
     count = await db.app_images.count_documents({})
-    if STORAGE_BACKEND == "local" and count == 0:
-        logger.info("Local storage has no app images; add them from the admin dashboard")
-        return
     if count == 0:
         docs = []
         for s in SEED_APP_IMAGES:
@@ -596,7 +647,35 @@ async def reorder_app_images(payload: ReorderPayload, x_admin_password: Optional
 
 
 @api_router.get("/app-images/file/{path:path}")
-async def serve_app_image(path: str):
+async def serve_app_image(
+    path: str,
+    sig: Optional[str] = None,
+    exp: Optional[str] = None,
+    x_admin_password: Optional[str] = Header(default=None),
+    x_cleaner_id: Optional[str] = Header(default=None),
+    x_cleaner_pin: Optional[str] = Header(default=None),
+):
+    # Job-proof photos (customer property) require a valid short-lived signature
+    # (attached by _clean_assignment) OR admin/cleaner header auth.
+    if "/proof/" in path:
+        authorized = _proof_sig_ok(path, sig, exp)
+        if not authorized and x_admin_password:
+            try:
+                _check_admin(x_admin_password)
+                authorized = True
+            except HTTPException:
+                pass
+        if not authorized and x_cleaner_id and x_cleaner_pin:
+            try:
+                _check_pin(x_cleaner_pin, await _get_cleaner_pin())
+                parts = path.split("/proof/", 1)[1].split("/", 1)
+                aid = parts[0] if parts else ""
+                if aid and await db.assignments.find_one({"id": aid, "cleaner_id": x_cleaner_id}):
+                    authorized = True
+            except HTTPException:
+                pass
+        if not authorized:
+            raise HTTPException(status_code=401, detail="Auth required for proof photos")
     try:
         data, content_type = get_object(path)
         return Response(content=data, media_type=content_type, headers={"Cache-Control": "public, max-age=86400"})
@@ -635,6 +714,7 @@ DEFAULT_BUSINESS = {
     ],
     "logo_url": None,
     "review_url": "",
+    "require_photos_for_done": False,
 }
 
 
@@ -659,6 +739,7 @@ class BusinessSettingsUpdate(BaseModel):
     website: Optional[str] = None
     hours: Optional[List[HoursRow]] = None
     review_url: Optional[str] = None
+    require_photos_for_done: Optional[bool] = None
 
 
 async def _get_business_merged():
@@ -730,7 +811,7 @@ async def _get_cleaner_pin():
 
 
 def _check_pin(pin: Optional[str], expected: str):
-    if not pin or pin != expected:
+    if not pin or not _secrets.compare_digest(str(pin), str(expected)):
         raise HTTPException(status_code=401, detail="Invalid cleaner PIN")
 
 
@@ -741,7 +822,9 @@ class PinUpdate(BaseModel):
 @api_router.get("/staff/pin")
 async def get_staff_pin(x_admin_password: Optional[str] = Header(default=None)):
     _check_admin(x_admin_password)
-    return {"pin": await _get_cleaner_pin()}
+    doc = await db.app_settings.find_one({"key": "staff"})
+    pin = (doc or {}).get("cleaner_pin") or DEFAULT_CLEANER_PIN
+    return {"pin": pin, "is_default": pin == DEFAULT_CLEANER_PIN}
 
 
 @api_router.put("/staff/pin")
@@ -751,7 +834,7 @@ async def update_staff_pin(payload: PinUpdate, x_admin_password: Optional[str] =
     if not re.fullmatch(r"\d{4,8}", pin):
         raise HTTPException(status_code=400, detail="PIN must be 4-8 digits")
     await db.app_settings.update_one({"key": "staff"}, {"$set": {"cleaner_pin": pin}}, upsert=True)
-    return {"pin": pin}
+    return {"pin": pin, "is_default": pin == DEFAULT_CLEANER_PIN}
 
 
 class CleanerCheckin(BaseModel):
@@ -846,20 +929,41 @@ class AssignmentCreate(BaseModel):
     message: Optional[str] = None
 
 
-class AssignmentDone(BaseModel):
-    cleaner_id: str
-    pin: str
-
-
 ASSIGNMENT_FIELDS = ("id", "quote_id", "cleaner_id", "cleaner_name", "customer_name", "service_type",
                      "address", "phone", "preferred_date", "message", "status", "created_at",
                      "status_updated_at", "completed_at", "photos", "review_sent_at")
 
 
-def _clean_assignment(doc):
+def _client_key(name: Optional[str], phone: Optional[str]) -> str:
+    """Stable per-customer key: lowercased trimmed name + digits-only phone."""
+    n = (name or "").strip().lower()
+    p = re.sub(r"\D", "", phone or "")
+    return f"{n}|{p}"
+
+
+async def _load_client_notes_map(assignments: List[dict]) -> dict:
+    """Fetch client notes for a batch of assignments in one query, keyed by _client_key."""
+    keys = list({_client_key(a.get("customer_name"), a.get("phone")) for a in assignments})
+    if not keys:
+        return {}
+    docs = await db.client_notes.find({"key": {"$in": keys}}, {"_id": 0}).to_list(len(keys))
+    return {d["key"]: d.get("notes", "") for d in docs}
+
+
+def _clean_assignment(doc, notes: str = ""):
     out = {k: doc.get(k) for k in ASSIGNMENT_FIELDS}
-    out["photos"] = out.get("photos") or []
+    photos = out.get("photos") or []
+    # Attach a short-lived signature so admin/cleaner UIs can render proof photos over <img>.
+    out["photos"] = [
+        {**p, "url": _apply_proof_signature(p.get("url", ""))} for p in photos
+    ]
+    out["client_notes"] = notes
     return out
+
+
+async def _clean_assignments_with_notes(docs: List[dict]) -> List[dict]:
+    notes_map = await _load_client_notes_map(docs)
+    return [_clean_assignment(d, notes_map.get(_client_key(d.get("customer_name"), d.get("phone")), "")) for d in docs]
 
 
 @api_router.post("/assignments")
@@ -877,14 +981,15 @@ async def create_assignment(payload: AssignmentCreate, x_admin_password: Optiona
     }
     await db.assignments.delete_many({"quote_id": payload.quote_id, "status": {"$ne": "done"}})
     await db.assignments.insert_one(doc)
-    return _clean_assignment(doc)
+    notes_map = await _load_client_notes_map([doc])
+    return _clean_assignment(doc, notes_map.get(_client_key(doc.get("customer_name"), doc.get("phone")), ""))
 
 
 @api_router.get("/assignments")
 async def list_assignments(x_admin_password: Optional[str] = Header(default=None)):
     _check_admin(x_admin_password)
     docs = await db.assignments.find({}).sort("created_at", -1).to_list(500)
-    return [_clean_assignment(d) for d in docs]
+    return await _clean_assignments_with_notes(docs)
 
 
 @api_router.delete("/assignments/{assignment_id}")
@@ -902,7 +1007,7 @@ async def cleaner_jobs(cleaner_id: str, x_cleaner_pin: Optional[str] = Header(de
     docs = await db.assignments.find(
         {"cleaner_id": cleaner_id, "status": {"$in": ["assigned", "on_the_way", "cleaning"]}}
     ).sort("created_at", -1).to_list(100)
-    return [_clean_assignment(d) for d in docs]
+    return await _clean_assignments_with_notes(docs)
 
 
 class AssignmentStatusUpdate(BaseModel):
@@ -916,33 +1021,58 @@ async def update_assignment_status(assignment_id: str, payload: AssignmentStatus
     _check_pin(payload.pin, await _get_cleaner_pin())
     if payload.status not in ("on_the_way", "cleaning", "done"):
         raise HTTPException(status_code=400, detail="Invalid status")
-    updates = {"status": payload.status, "status_updated_at": datetime.now(timezone.utc).isoformat()}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    updates = {"status": payload.status, "status_updated_at": now_iso}
     if payload.status == "done":
-        updates["completed_at"] = updates["status_updated_at"]
-    res = await db.assignments.update_one({"id": assignment_id, "cleaner_id": payload.cleaner_id}, {"$set": updates})
-    if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    if payload.status == "done":
-        doc = await db.assignments.find_one({"id": assignment_id}, {"_id": 0})
-        if doc and not doc.get("review_sent_at"):
-            asyncio.create_task(_auto_send_review(doc))
-    return {"ok": True, "status": payload.status}
+        # Insurance-protection guard: if admin has toggled "require photos for done",
+        # block the transition when this assignment lacks at least 1 before + 1 after photo.
+        biz = await _get_business_merged()
+        if biz.get("require_photos_for_done"):
+            existing = await db.assignments.find_one(
+                {"id": assignment_id, "cleaner_id": payload.cleaner_id},
+                {"_id": 0, "photos": 1},
+            )
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Assignment not found")
+            photos = existing.get("photos") or []
+            has_before = any(p.get("kind") == "before" for p in photos)
+            has_after = any(p.get("kind") == "after" for p in photos)
+            if not (has_before and has_after):
+                missing = []
+                if not has_before:
+                    missing.append("before")
+                if not has_after:
+                    missing.append("after")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"At least one {' and one '.join(missing)} photo is required before marking this job Done.",
+                )
+        # Atomic transition-to-done: only the FIRST request that flips this doc's status
+        # to 'done' will match; a rapid double-tap by the cleaner will hit the second
+        # branch and NOT re-schedule the review SMS.
+        updates["completed_at"] = now_iso
+        doc = await db.assignments.find_one_and_update(
+            {"id": assignment_id, "cleaner_id": payload.cleaner_id, "status": {"$ne": "done"}},
+            {"$set": updates},
+            projection={"_id": 0},
+            return_document=ReturnDocument.AFTER,
+        )
+        if doc is None:
+            # already done — nothing to do (no duplicate SMS)
+            still = await db.assignments.find_one({"id": assignment_id, "cleaner_id": payload.cleaner_id})
+            if not still:
+                raise HTTPException(status_code=404, detail="Assignment not found")
+            return {"ok": True, "status": "done", "already": True}
+        if not doc.get("review_sent_at"):
+            _schedule_bg(_auto_send_review(doc), name=f"review-{assignment_id}")
+        return {"ok": True, "status": "done"}
 
-
-@api_router.post("/assignments/{assignment_id}/done")
-async def complete_assignment(assignment_id: str, payload: AssignmentDone):
-    _check_pin(payload.pin, await _get_cleaner_pin())
-    now = datetime.now(timezone.utc).isoformat()
     res = await db.assignments.update_one(
-        {"id": assignment_id, "cleaner_id": payload.cleaner_id},
-        {"$set": {"status": "done", "completed_at": now, "status_updated_at": now}},
+        {"id": assignment_id, "cleaner_id": payload.cleaner_id}, {"$set": updates}
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    doc = await db.assignments.find_one({"id": assignment_id}, {"_id": 0})
-    if doc and not doc.get("review_sent_at"):
-        asyncio.create_task(_auto_send_review(doc))
-    return {"ok": True}
+    return {"ok": True, "status": payload.status}
 
 
 # ---------------- Job History ----------------
@@ -958,7 +1088,110 @@ async def assignments_history(
     if cleaner_id:
         query["cleaner_id"] = cleaner_id
     docs = await db.assignments.find(query).sort("completed_at", -1).to_list(limit)
-    return [_clean_assignment(d) for d in docs]
+    return await _clean_assignments_with_notes(docs)
+
+
+# ---------------- Client Notes ----------------
+class ClientNotesUpdate(BaseModel):
+    customer_name: str
+    phone: Optional[str] = ""
+    notes: str
+
+
+@api_router.get("/clients/notes")
+async def get_client_notes(
+    customer_name: str,
+    phone: Optional[str] = "",
+    x_admin_password: Optional[str] = Header(default=None),
+):
+    _check_admin(x_admin_password)
+    key = _client_key(customer_name, phone)
+    doc = await db.client_notes.find_one({"key": key}, {"_id": 0})
+    return {
+        "customer_name": customer_name,
+        "phone": phone or "",
+        "notes": (doc or {}).get("notes", ""),
+        "updated_at": (doc or {}).get("updated_at"),
+    }
+
+
+@api_router.put("/clients/notes")
+async def put_client_notes(payload: ClientNotesUpdate, x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    key = _client_key(payload.customer_name, payload.phone)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    notes = (payload.notes or "").strip()
+    if len(notes) > 2000:
+        raise HTTPException(status_code=400, detail="Notes too long (max 2000 characters)")
+    await db.client_notes.update_one(
+        {"key": key},
+        {"$set": {
+            "key": key,
+            "customer_name": payload.customer_name,
+            "phone": payload.phone or "",
+            "notes": notes,
+            "updated_at": now_iso,
+        }},
+        upsert=True,
+    )
+    return {"customer_name": payload.customer_name, "phone": payload.phone or "", "notes": notes, "updated_at": now_iso}
+
+
+class ClientMergeRequest(BaseModel):
+    from_name: str
+    from_phone: Optional[str] = ""
+    into_name: str
+    into_phone: Optional[str] = ""
+
+
+@api_router.post("/clients/merge")
+async def merge_client(payload: ClientMergeRequest, x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    from_key = _client_key(payload.from_name, payload.from_phone)
+    into_key = _client_key(payload.into_name, payload.into_phone)
+    if from_key == into_key:
+        raise HTTPException(status_code=400, detail="Source and target are already the same client")
+
+    # Find all assignments matching the SOURCE (name+phone digits). Since we don't store
+    # the key on assignments, we scan candidates by canonical name and match digits-only phone.
+    from_name_lc = (payload.from_name or "").strip().lower()
+    from_phone_digits = re.sub(r"\D", "", payload.from_phone or "")
+    candidates = await db.assignments.find(
+        {"customer_name": {"$regex": f"^{re.escape(payload.from_name.strip())}$", "$options": "i"}}
+    ).to_list(1000)
+    moved = 0
+    for a in candidates:
+        adigits = re.sub(r"\D", "", a.get("phone") or "")
+        if adigits != from_phone_digits:
+            continue
+        await db.assignments.update_one(
+            {"id": a["id"]},
+            {"$set": {"customer_name": payload.into_name, "phone": payload.into_phone or ""}},
+        )
+        moved += 1
+
+    # Merge notes: concatenate source notes into target if both present.
+    src_notes_doc = await db.client_notes.find_one({"key": from_key})
+    tgt_notes_doc = await db.client_notes.find_one({"key": into_key})
+    src_notes = (src_notes_doc or {}).get("notes", "").strip()
+    tgt_notes = (tgt_notes_doc or {}).get("notes", "").strip()
+    combined = tgt_notes
+    if src_notes and src_notes not in tgt_notes:
+        combined = f"{tgt_notes}\n\n[merged from {payload.from_name}] {src_notes}".strip() if tgt_notes else src_notes
+    if combined:
+        await db.client_notes.update_one(
+            {"key": into_key},
+            {"$set": {
+                "key": into_key,
+                "customer_name": payload.into_name,
+                "phone": payload.into_phone or "",
+                "notes": combined,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+    await db.client_notes.delete_one({"key": from_key})
+    return {"moved_assignments": moved, "into_key": into_key, "merged_notes": bool(src_notes and combined != tgt_notes)}
 
 
 # ---------------- Photo Proof ----------------
@@ -1082,16 +1315,141 @@ async def send_review_request(assignment_id: str, x_admin_password: Optional[str
     sent = await run_in_threadpool(
         _send_review_sms, assignment["phone"], assignment.get("customer_name", ""), review_url
     )
+    if not sent:
+        raise HTTPException(
+            status_code=502,
+            detail="Could not send the SMS (Twilio not configured or send failed). Copy the review link and share it manually.",
+        )
     now = datetime.now(timezone.utc).isoformat()
     await db.assignments.update_one({"id": assignment_id}, {"$set": {"review_sent_at": now}})
-    return {"ok": True, "sent_via_sms": sent, "review_sent_at": now, "review_url": review_url}
+    return {"ok": True, "sent_via_sms": True, "review_sent_at": now, "review_url": review_url}
+
+
+# ---------------- Owner Nightly Digest ----------------
+def _digest_local_today_bounds():
+    """Return today's ISO-string bounds in UTC (start-of-day, next-day) for the owner's TZ.
+    Uses DIGEST_TZ_OFFSET_HOURS (default -7 = Edmonton/Mountain) to define "today"."""
+    try:
+        tz_off = int(os.environ.get("DIGEST_TZ_OFFSET_HOURS", "-7"))
+    except ValueError:
+        tz_off = -7
+    now_utc = datetime.now(timezone.utc)
+    local_now = now_utc + timedelta(hours=tz_off)
+    local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    utc_start = (local_start - timedelta(hours=tz_off))
+    utc_end = utc_start + timedelta(days=1)
+    return utc_start.isoformat(), utc_end.isoformat(), local_now.date().isoformat()
+
+
+async def _build_digest_body() -> str:
+    utc_start, utc_end, local_date = _digest_local_today_bounds()
+
+    leads_today = await db.quotes.count_documents({"created_at": {"$gte": utc_start, "$lt": utc_end}})
+    top_lead = await db.quotes.find_one(
+        {"created_at": {"$gte": utc_start, "$lt": utc_end}},
+        sort=[("created_at", -1)],
+    )
+
+    done_today = await db.assignments.count_documents({
+        "status": "done",
+        "completed_at": {"$gte": utc_start, "$lt": utc_end},
+    })
+    missed_reviews = await db.assignments.count_documents({
+        "status": "done",
+        "completed_at": {"$gte": utc_start, "$lt": utc_end},
+        "$or": [{"review_sent_at": None}, {"review_sent_at": {"$exists": False}}],
+    })
+
+    lines = [f"Scrubby daily digest · {local_date}"]
+    lines.append(f"• Leads today: {leads_today}")
+    if top_lead:
+        lines.append(f"  ↳ latest: {top_lead.get('name','?')} — {top_lead.get('service_type','?')}")
+    lines.append(f"• Jobs done: {done_today}")
+    lines.append(f"• Missed reviews: {missed_reviews}")
+    return "\n".join(lines)
+
+
+def _send_digest_sms(body: str) -> bool:
+    sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    token = os.environ.get("TWILIO_AUTH_TOKEN")
+    from_number = os.environ.get("TWILIO_FROM_NUMBER")
+    to = os.environ.get("DIGEST_TO_NUMBER") or os.environ.get("LEAD_ALERT_TO")
+    if not all([sid, token, from_number, to]):
+        logger.warning("Digest not sent — Twilio or DIGEST_TO_NUMBER missing")
+        return False
+    try:
+        TwilioClient(sid, token).messages.create(body=body, from_=from_number, to=to)
+        logger.info("Owner digest SMS sent to %s", to)
+        return True
+    except Exception as e:
+        logger.error("Digest SMS failed: %s", e)
+        return False
+
+
+async def _send_digest_now() -> dict:
+    body = await _build_digest_body()
+    sent = await run_in_threadpool(_send_digest_sms, body)
+    if sent:
+        await db.app_settings.update_one(
+            {"key": "digest_meta"},
+            {"$set": {"key": "digest_meta", "last_sent_local_date": _digest_local_today_bounds()[2],
+                      "last_sent_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+    return {"sent": sent, "body": body}
+
+
+@api_router.post("/admin/digest/send-now")
+async def admin_digest_send_now(x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    result = await _send_digest_now()
+    if not result["sent"]:
+        raise HTTPException(status_code=502, detail="Digest not sent — check DIGEST_TO_NUMBER and Twilio env vars.")
+    return result
+
+
+@api_router.get("/admin/digest/preview")
+async def admin_digest_preview(x_admin_password: Optional[str] = Header(default=None)):
+    _check_admin(x_admin_password)
+    body = await _build_digest_body()
+    return {"body": body, "to": os.environ.get("DIGEST_TO_NUMBER") or os.environ.get("LEAD_ALERT_TO") or ""}
+
+
+async def _digest_scheduler_loop():
+    """Fires once per day at DIGEST_HOUR (local, per DIGEST_TZ_OFFSET_HOURS). Idempotent via last_sent_local_date."""
+    try:
+        target_hour = int(os.environ.get("DIGEST_HOUR", "21"))  # 9pm default
+    except ValueError:
+        target_hour = 21
+    logger.info("Digest scheduler started (target hour=%s)", target_hour)
+    while True:
+        try:
+            try:
+                tz_off = int(os.environ.get("DIGEST_TZ_OFFSET_HOURS", "-7"))
+            except ValueError:
+                tz_off = -7
+            local_now = datetime.now(timezone.utc) + timedelta(hours=tz_off)
+            local_today = local_now.date().isoformat()
+            meta = await db.app_settings.find_one({"key": "digest_meta"}) or {}
+            already_sent_today = meta.get("last_sent_local_date") == local_today
+            if local_now.hour >= target_hour and not already_sent_today:
+                await _send_digest_now()
+            # sleep until the top of the next hour (max 1h)
+            next_wake = local_now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            sleep_s = max(60, min(3600, int((next_wake - local_now).total_seconds())))
+            await asyncio.sleep(sleep_s)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error("Digest scheduler error: %s", e)
+            await asyncio.sleep(300)
 
 
 app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1102,12 +1460,14 @@ app.add_middleware(
 async def on_startup():
     try:
         init_storage()
-        logger.info("%s storage initialized", STORAGE_BACKEND.capitalize())
+        logger.info("Object storage initialized")
     except Exception as e:
         logger.error("Storage init failed: %s", e)
     await seed_site_images()
     await seed_app_images()
     await _load_admin_password()
+    # Start the nightly owner digest scheduler in the background.
+    _schedule_bg(_digest_scheduler_loop(), name="digest-scheduler")
 
 
 @app.on_event("shutdown")
