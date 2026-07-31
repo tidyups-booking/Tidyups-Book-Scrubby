@@ -82,8 +82,13 @@ jobs:
       - name: Create App Store Connect key
         working-directory: ${{ matrix.app.working_directory }}
         env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           ASC_API_KEY_P8_BASE64: ${{ secrets[matrix.app.key_secret] }}
         run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN repository secret is required."
+            exit 1
+          fi
           if [ -z "$ASC_API_KEY_P8_BASE64" ]; then
             echo "${{ matrix.app.key_secret }} repository secret is required."
             exit 1
@@ -93,4 +98,6 @@ jobs:
 
       - name: Build and submit iOS app
         working-directory: ${{ matrix.app.working_directory }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas build --platform ios --profile production --auto-submit --non-interactive --wait
