@@ -26,22 +26,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Determine apps to build
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          BOOK_SCRUBBY='{"name":"book-scrubby","working_directory":"frontend","key_id":"676XW385F6","key_secret":"ASC_API_KEY_P8_BASE64"}'
+          TIDYUPS_CLEANING='{"name":"tidyups-cleaning","working_directory":"apps/tidyups-cleaning","key_id":"8KRQVKD5VB","key_secret":"ASC_API_KEY_P8_BASE64_TIDYUPS"}'
+          case "${{ github.event.inputs.app || 'both' }}" in
+            book-scrubby)
+              APPS="[$BOOK_SCRUBBY]"
+              ;;
+            tidyups-cleaning)
+              APPS="[$TIDYUPS_CLEANING]"
+              ;;
+            *)
+              APPS="[$BOOK_SCRUBBY,$TIDYUPS_CLEANING]"
+              ;;
+          esac
+          echo "matrix={\"app\":$APPS}" >> "$GITHUB_OUTPUT"
+
   build-and-submit:
     name: Build and submit iOS (${{ matrix.app.name }})
+    needs: prepare
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        app:
-          - name: book-scrubby
-            working_directory: frontend
-            key_id: 676XW385F6
-            key_secret: ASC_API_KEY_P8_BASE64
-          - name: tidyups-cleaning
-            working_directory: apps/tidyups-cleaning
-            key_id: 8KRQVKD5VB
-            key_secret: ASC_API_KEY_P8_BASE64_TIDYUPS
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.app == 'both' || github.event.inputs.app == matrix.app.name }}
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
