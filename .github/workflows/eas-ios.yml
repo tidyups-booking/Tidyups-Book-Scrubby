@@ -35,8 +35,8 @@ jobs:
       - name: Set matrix
         id: set-matrix
         run: |
-          BOOK_SCRUBBY='{"name":"book-scrubby","working_directory":"frontend","key_id":"676XW385F6","key_secret":"ASC_API_KEY_P8_BASE64"}'
-          TIDYUPS_CLEANING='{"name":"tidyups-cleaning","working_directory":"apps/tidyups-cleaning","key_id":"8KRQVKD5VB","key_secret":"ASC_API_KEY_P8_BASE64_TIDYUPS"}'
+          BOOK_SCRUBBY='{"name":"book-scrubby","working_directory":"frontend","key_id":"676XW385F6","key_secret":"ASC_API_KEY_P8_BASE64","expo_token_secret":"EXPO_TOKEN"}'
+          TIDYUPS_CLEANING='{"name":"tidyups-cleaning","working_directory":"apps/tidyups-cleaning","key_id":"8KRQVKD5VB","key_secret":"ASC_API_KEY_P8_BASE64_TIDYUPS","expo_token_secret":"EXPO_TOKEN_TIDYUPS"}'
           case "${{ github.event.inputs.app || 'both' }}" in
             book-scrubby)
               APPS="[$BOOK_SCRUBBY]"
@@ -77,7 +77,7 @@ jobs:
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+          token: ${{ secrets[matrix.app.expo_token_secret] }}
 
       - name: Create App Store Connect key
         working-directory: ${{ matrix.app.working_directory }}
@@ -93,4 +93,6 @@ jobs:
 
       - name: Build and submit iOS app
         working-directory: ${{ matrix.app.working_directory }}
+        env:
+          EXPO_TOKEN: ${{ secrets[matrix.app.expo_token_secret] }}
         run: eas build --platform ios --profile production --auto-submit --non-interactive --wait
