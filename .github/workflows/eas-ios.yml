@@ -1,0 +1,81 @@
+name: EAS iOS Build and Submit
+
+on:
+  push:
+    branches:
+      - Main
+    paths:
+      - 'frontend/**'
+      - 'apps/tidyups-cleaning/**'
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Which app(s) to build and submit'
+        type: choice
+        options:
+          - both
+          - book-scrubby
+          - tidyups-cleaning
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-ios-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-submit:
+    name: Build and submit iOS (${{ matrix.app.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - name: book-scrubby
+            working_directory: frontend
+            key_id: 676XW385F6
+            key_secret: ASC_API_KEY_P8_BASE64
+          - name: tidyups-cleaning
+            working_directory: apps/tidyups-cleaning
+            key_id: 8KRQVKD5VB
+            key_secret: ASC_API_KEY_P8_BASE64_TIDYUPS
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.app == 'both' || github.event.inputs.app == matrix.app.name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install app dependencies
+        working-directory: ${{ matrix.app.working_directory }}
+        run: |
+          corepack enable
+          yarn install --frozen-lockfile
+
+      - name: Set up Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Create App Store Connect key
+        working-directory: ${{ matrix.app.working_directory }}
+        env:
+          ASC_API_KEY_P8_BASE64: ${{ secrets[matrix.app.key_secret] }}
+        run: |
+          if [ -z "$ASC_API_KEY_P8_BASE64" ]; then
+            echo "${{ matrix.app.key_secret }} repository secret is required."
+            exit 1
+          fi
+          printf '%s' "$ASC_API_KEY_P8_BASE64" | base64 --decode > "AuthKey_${{ matrix.app.key_id }}.p8"
+          chmod 600 "AuthKey_${{ matrix.app.key_id }}.p8"
+
+      - name: Build and submit iOS app
+        working-directory: ${{ matrix.app.working_directory }}
+        run: eas build --platform ios --profile production --auto-submit --non-interactive --wait
