@@ -211,7 +211,6 @@ export default function CleanerJobs({ jobs, onStatus, cleaner, onJobChange, setE
                 <Text style={styles.jobRowText}>Preferred: {job.preferred_date}</Text>
               </View>
             ) : null}
-<<<<<<< HEAD
             {job.message ? <Text style={styles.jobMessage}>"{job.message}"</Text> : null}
             {job.client_notes ? (
               <View style={styles.clientNotesBox} testID={`cleaner-client-notes-${index}`}>
@@ -222,9 +221,6 @@ export default function CleanerJobs({ jobs, onStatus, cleaner, onJobChange, setE
                 <Text style={styles.clientNotesText}>{job.client_notes}</Text>
               </View>
             ) : null}
-=======
-            {job.message ? <Text style={styles.jobMessage}>{`"${job.message}"`}</Text> : null}
->>>>>>> origin/Main
             {cleaner ? (
               <>
                 <PhotoRow job={job} kind="before" cleaner={cleaner} onJobChange={onJobChange} setError={setError} />
