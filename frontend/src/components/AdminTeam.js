@@ -42,12 +42,95 @@ async function confirmAsync(title, message) {
   });
 }
 
+function statusText(item, active) {
+  if (active) return 'Active now — sharing live location';
+  if (item.last_seen) return `Last seen ${timeAgo(item.last_seen)}`;
+  return 'Never shared location';
+}
+
+const LIST_CONTENT_STYLE = { paddingHorizontal: 20, paddingBottom: 40, gap: 12 };
+const MAP_PIN_ROW_STYLE = { paddingHorizontal: 20 };
+
+function CleanerRow({ item, index, onTrack, onDelete }) {
+  const active = isActive(item);
+  const noLocation = item.lat == null;
+  return (
+    <View style={styles.row} testID={`admin-cleaner-row-${index}`}>
+      <View style={[styles.dot, active ? styles.dotActive : styles.dotIdle]} />
+      <View style={styles.rowText}>
+        <Text style={styles.name}>{item.name}</Text>
+        <Text style={[styles.sub, active && styles.subActive]}>{statusText(item, active)}</Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.actionBtn, noLocation && styles.actionBtnDisabled]}
+        disabled={noLocation}
+        onPress={() => onTrack(item)}
+        testID={`admin-cleaner-track-${index}`}
+      >
+        <Ionicons name="map" size={16} color={COLORS.pink} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.actionBtn, styles.deleteBtn]}
+        onPress={() => onDelete(item)}
+        testID={`admin-cleaner-delete-${index}`}
+      >
+        <Ionicons name="trash" size={15} color={COLORS.danger} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function PinCard({ pin, setPin, savingPin, onSavePin, isDefault, error, notice }) {
+  return (
+    <View style={styles.pinCard}>
+      <Text style={styles.pinTitle}>Cleaner PIN</Text>
+      <Text style={styles.pinHint}>
+        {'Cleaners check in from the Contact tab \u2192 \u201cCleaner Check-In\u201d with this PIN, then share live location while driving to a job.'}
+      </Text>
+      {isDefault ? (
+        <View style={styles.pinWarn} testID="admin-pin-default-warn">
+          <Ionicons name="warning" size={14} color={COLORS.gold} />
+          <Text style={styles.pinWarnText}>
+            Your PIN is still the default. Change it now so only your team can check in.
+          </Text>
+        </View>
+      ) : null}
+      <View style={styles.pinRow}>
+        <TextInput
+          style={styles.pinInput}
+          value={pin}
+          onChangeText={setPin}
+          keyboardType="number-pad"
+          maxLength={8}
+          placeholder="4-8 digits"
+          placeholderTextColor={COLORS.placeholder}
+          testID="admin-pin-input"
+        />
+        <TouchableOpacity style={styles.pinSave} onPress={onSavePin} disabled={savingPin} testID="admin-pin-save">
+          {savingPin ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.pinSaveText}>Save</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+      {error ? (
+        <Text style={styles.error} testID="admin-team-error">{error}</Text>
+      ) : null}
+      {notice ? (
+        <Text style={styles.notice} testID="admin-team-notice">{notice}</Text>
+      ) : null}
+    </View>
+  );
+}
+
 export default function AdminTeam({ password }) {
   const [cleaners, setCleaners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [pin, setPin] = useState('');
   const [savingPin, setSavingPin] = useState(false);
+  const [isDefaultPin, setIsDefaultPin] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [view, setView] = useState('list');
@@ -66,17 +149,16 @@ export default function AdminTeam({ password }) {
   }, [password]);
 
   useEffect(() => {
-    const initialTimer = setTimeout(() => {
-      load();
-    }, 0);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
     fetchStaffPin(password)
-      .then((d) => setPin(d.pin || ''))
+      .then((d) => {
+        setPin(d.pin || '');
+        setIsDefaultPin(!!d.is_default);
+      })
       .catch(() => {});
-    const pollTimer = setInterval(load, 30000);
-    return () => {
-      clearTimeout(initialTimer);
-      clearInterval(pollTimer);
-    };
+    const timer = setInterval(load, 30000);
+    return () => clearInterval(timer);
   }, [load, password]);
 
   const onSavePin = async () => {
@@ -86,6 +168,7 @@ export default function AdminTeam({ password }) {
     try {
       const d = await updateStaffPin(pin.trim(), password);
       setPin(d.pin);
+      setIsDefaultPin(!!d.is_default);
       setNotice('PIN updated — cleaners already sharing must check in again with the new PIN.');
     } catch (e) {
       setError(e.message || 'PIN update failed');
@@ -137,7 +220,7 @@ export default function AdminTeam({ password }) {
   if (view === 'map') {
     return (
       <View style={{ flex: 1 }}>
-        <View style={{ paddingHorizontal: 20 }}>{toggle}</View>
+        <View style={MAP_PIN_ROW_STYLE}>{toggle}</View>
         <TeamMap cleaners={cleaners} />
       </View>
     );
@@ -147,7 +230,7 @@ export default function AdminTeam({ password }) {
     <FlatList
       data={cleaners}
       keyExtractor={(item) => item.id}
-      contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40, gap: 12 }}
+      contentContainerStyle={LIST_CONTENT_STYLE}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -161,74 +244,27 @@ export default function AdminTeam({ password }) {
       ListHeaderComponent={
         <View>
           {toggle}
-          <View style={styles.pinCard}>
-          <Text style={styles.pinTitle}>Cleaner PIN</Text>
-          <Text style={styles.pinHint}>
-            {'Cleaners check in from the Contact tab → "Cleaner Check-In" with this PIN, then share live location while driving to a job.'}
-          </Text>
-          <View style={styles.pinRow}>
-            <TextInput
-              style={styles.pinInput}
-              value={pin}
-              onChangeText={setPin}
-              keyboardType="number-pad"
-              maxLength={8}
-              placeholder="4-8 digits"
-              placeholderTextColor={COLORS.placeholder}
-              testID="admin-pin-input"
-            />
-            <TouchableOpacity style={styles.pinSave} onPress={onSavePin} disabled={savingPin} testID="admin-pin-save">
-              {savingPin ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.pinSaveText}>Save</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-          {error ? (
-            <Text style={styles.error} testID="admin-team-error">
-              {error}
-            </Text>
-          ) : null}
-          {notice ? (
-            <Text style={styles.notice} testID="admin-team-notice">
-              {notice}
-            </Text>
-          ) : null}
-          </View>
+          <PinCard
+            pin={pin}
+            setPin={setPin}
+            savingPin={savingPin}
+            onSavePin={onSavePin}
+            isDefault={isDefaultPin}
+            error={error}
+            notice={notice}
+          />
         </View>
       }
-      renderItem={({ item, index }) => {
-        const active = isActive(item);
-        return (
-          <View style={styles.row} testID={`admin-cleaner-row-${index}`}>
-            <View style={[styles.dot, { backgroundColor: active ? COLORS.success : COLORS.placeholder }]} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={[styles.sub, active && { color: COLORS.success }]}>
-                {active
-                  ? 'Active now — sharing live location'
-                  : item.last_seen
-                  ? `Last seen ${timeAgo(item.last_seen)}`
-                  : 'Never shared location'}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.actionBtn, item.lat == null && { opacity: 0.35 }]}
-              disabled={item.lat == null}
-              onPress={() => Linking.openURL(`https://maps.google.com/?q=${item.lat},${item.lng}`)}
-              testID={`admin-cleaner-track-${index}`}
-            >
-              <Ionicons name="map" size={16} color={COLORS.pink} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => onDelete(item)} testID={`admin-cleaner-delete-${index}`}>
-              <Ionicons name="trash" size={15} color={COLORS.danger} />
-            </TouchableOpacity>
-          </View>
-        );
-      }}
+      renderItem={({ item, index }) => (
+        <CleanerRow
+          item={item}
+          index={index}
+          onTrack={(c) => Linking.openURL(`https://maps.google.com/?q=${c.lat},${c.lng}`)}
+          onDelete={onDelete}
+        />
+      )}
       ListEmptyComponent={
-        <View style={[styles.center, { paddingTop: 50 }]}>
+        <View style={[styles.center, styles.emptyPad]}>
           <MaterialCommunityIcons name="account-group-outline" size={44} color={COLORS.textMuted} />
           <Text style={styles.emptyText}>
             No cleaners yet. Share the PIN above with your team — they check in from the Contact tab.
@@ -267,6 +303,18 @@ const styles = StyleSheet.create({
   },
   pinTitle: { color: COLORS.text, fontFamily: FONTS.bodySemiBold, fontSize: 15, marginBottom: 6 },
   pinHint: { color: COLORS.textMuted, fontFamily: FONTS.body, fontSize: 12.5, lineHeight: 18, marginBottom: 12 },
+  pinWarn: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: 'rgba(240,199,79,0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(240,199,79,0.35)',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+  },
+  pinWarnText: { color: COLORS.gold, fontFamily: FONTS.bodyMedium, fontSize: 12.5, lineHeight: 18, flex: 1 },
   pinRow: { flexDirection: 'row', gap: 10 },
   pinInput: {
     flex: 1,
@@ -318,8 +366,13 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   dot: { width: 11, height: 11, borderRadius: 6 },
+  dotActive: { backgroundColor: COLORS.success },
+  dotIdle: { backgroundColor: COLORS.placeholder },
+  rowText: { flex: 1 },
   name: { color: COLORS.text, fontFamily: FONTS.bodySemiBold, fontSize: 15 },
   sub: { color: COLORS.textMuted, fontFamily: FONTS.body, fontSize: 12.5, marginTop: 2 },
+  subActive: { color: COLORS.success },
+  emptyPad: { paddingTop: 50 },
   actionBtn: {
     width: 36,
     height: 36,
@@ -330,6 +383,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actionBtnDisabled: { opacity: 0.35 },
   deleteBtn: { backgroundColor: 'rgba(248,113,113,0.08)', borderColor: 'rgba(248,113,113,0.25)' },
   emptyText: {
     color: COLORS.textMuted,
